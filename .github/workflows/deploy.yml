@@ -1,0 +1,49 @@
+name: Déployer la page d'inscription
+
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", ".github/workflows/deploy.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Injecter la configuration Supabase
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ vars.SUPABASE_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_KEY" ]; then
+            echo "::error::Ajoute les variables SUPABASE_URL et SUPABASE_KEY dans Settings > Secrets and variables > Actions > Variables."
+            exit 1
+          fi
+          mkdir -p _site
+          sed -e "s#https://VOTRE-PROJET.supabase.co#${SUPABASE_URL%/}#" \
+              -e "s#VOTRE-CLE-PUBLIQUE#${SUPABASE_KEY}#" \
+              site/index.html > _site/index.html
+          if grep -qE 'const SUPABASE_(URL|KEY) = "(https://VOTRE-PROJET|VOTRE-CLE)' _site/index.html; then
+            echo "::error::Configuration non injectée."; exit 1
+          fi
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
