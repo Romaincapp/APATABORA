@@ -34,6 +34,7 @@ jobs:
             exit 1
           fi
           mkdir -p _site
+          cp -r site/. _site/
           sed -e "s#https://VOTRE-PROJET.supabase.co#${SUPABASE_URL%/}#" \
               -e "s#VOTRE-CLE-PUBLIQUE#${SUPABASE_KEY}#" \
               site/index.html > _site/index.html
