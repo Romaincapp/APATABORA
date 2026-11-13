@@ -159,6 +159,14 @@ table.inst-grid select.missing { border: 1px dashed var(--full); background: var
 table.inst-grid select.dup { border-color: var(--warn); background: var(--warn-soft); }
 table.inst-grid select.pause { color: var(--muted); }
 table.inst-grid .sep { border-left: 2px solid var(--line); }
+table.inst-grid select.auto { border-color: var(--accent); }
+table.inst-grid select:disabled, table.inst-grid input:disabled { appearance: none; -webkit-appearance: none; opacity: 1; color: var(--fg); background: transparent; border-color: transparent; cursor: default; }
+.lockbar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 14px; border-radius: 10px; background: var(--accent-soft); }
+.lockbar b { font-size: 15px; }
+.lockbar form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.lockbar input { width: 200px; }
+.pill.lock { background: var(--accent-soft); color: var(--accent); }
+.hint-auto { font-size: 13px; color: var(--muted); }
 </style>
 </head>
 <body>
@@ -207,10 +215,21 @@ table.inst-grid .sep { border-left: 2px solid var(--line); }
             <div class="actions">
               <button class="btn small" type="button" id="inst-add">+ Ajouter un participant</button>
               <button class="btn small" type="button" id="inst-auto">Remplir automatiquement les cases vides</button>
-              <button class="btn small" type="button" id="inst-pdf">Télécharger le planning (PDF)</button>
+              <button class="btn small danger" type="button" id="inst-clear">Tout vider</button>
+              <button class="btn small primary" type="button" id="inst-pdf">Télécharger et verrouiller (PDF)</button>
             </div>
           </div>
+          <div class="lockbar" id="inst-lock" hidden>
+            <span>🔒 <b>Planning verrouillé</b> <span id="inst-lock-when"></span>. Il ne peut plus être modifié.</span>
+            <button class="btn small" type="button" id="unlock-open">Déverrouiller (organisateur)</button>
+            <form id="unlock-form" hidden autocomplete="off">
+              <label class="sr" for="unlock-code" style="font-size:13px">Code organisateur</label>
+              <input type="password" id="unlock-code" required placeholder="Code organisateur">
+              <button class="btn small primary" type="submit" id="unlock-btn">Déverrouiller</button>
+            </form>
+          </div>
           <div class="checks" id="inst-checks"></div>
+          <div class="hint-auto" id="inst-hint" hidden>Bordure bleue : case proposée automatiquement. Re-clique « Proposer une autre variante » pour une autre répartition ; les cases que tu as choisies toi-même ne bougent pas.</div>
           <div class="scroll" id="inst-scroll"><table class="inst-grid" id="inst-grid"></table></div>
           <div class="actions sticky-actions">
             <button class="btn primary" type="button" id="inst-save">Enregistrer</button>
@@ -417,10 +436,12 @@ function optionsHtml(rkey, cur, c, short) {
 function instRows(id) {
   if (drafts[id]) return drafts[id].rows;
   return people.filter(p => p.institution === id).sort(byName)
-    .map(p => ({ key: p.id, id: p.id, nom: p.nom, maj: p.maj, plan: { ...(p.plan || {}) }, changed: false }));
+    .map(p => ({ key: p.id, id: p.id, nom: p.nom, maj: p.maj, plan: { ...(p.plan || {}) }, changed: false, auto: new Set() }));
 }
 function ensureDraft(id) { if (!drafts[id]) drafts[id] = { rows: instRows(id) }; return drafts[id]; }
 const isDirty = id => !!drafts[id];
+const locked = id => !!INST[id]?.verrouille_le;
+const fmtDate = d => new Date(d).toLocaleString("fr-BE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 
 function renderInstCards() {
   const box = $("insts");
@@ -430,6 +451,7 @@ function renderInstCards() {
     const pct = rows.length ? Math.round(done / rows.length * 100) : 0;
     const diff = rows.length - i.nb_attendu;
     const pills = [
+      locked(i.id) ? `<span class="pill lock">🔒 verrouillé</span>` : "",
       isDirty(i.id) ? `<span class="pill draft">non enregistré</span>` : "",
       rows.length && done === rows.length ? `<span class="pill ok">complet</span>` : "",
       i.nb_attendu && diff !== 0 ? `<span class="pill warn">${rows.length}/${i.nb_attendu} attendus</span>` : "",
@@ -443,7 +465,7 @@ function renderInstCards() {
 }
 $("insts").addEventListener("click", e => {
   const b = e.target.closest("[data-inst]"); if (!b) return;
-  currentInst = b.dataset.inst;
+  currentInst = b.dataset.inst; variantNo = 0;
   try { localStorage.setItem("apa-inst", currentInst); } catch {}
   instMsg("");
   renderInstCards(); renderInstPanel(true);
@@ -457,8 +479,16 @@ function renderInstPanel(force) {
   // Ne pas reconstruire le tableau pendant qu'on y tape ou qu'un menu est ouvert.
   if (!force && $("inst-grid").contains(document.activeElement)) { instPending = true; renderInstChecks(); return; }
   instPending = false;
-  const inst = INST[currentInst], rows = instRows(currentInst), c = counts(null);
+  const inst = INST[currentInst], c = counts(null), lk = locked(currentInst);
+  if (lk && drafts[currentInst]) { delete drafts[currentInst]; instMsg("Ce planning vient d'être verrouillé : tes modifications non enregistrées ont été abandonnées.", "err"); }
+  const rows = instRows(currentInst), dis = lk ? " disabled" : "";
   $("inst-title").textContent = inst.nom;
+  $("inst-lock").hidden = !lk;
+  if (lk) $("inst-lock-when").textContent = "le " + fmtDate(inst.verrouille_le) + " (PDF téléchargé)";
+  else { $("unlock-form").hidden = true; $("unlock-open").hidden = false; }
+  for (const id of ["inst-add", "inst-auto", "inst-clear"]) $(id).hidden = lk;
+  $("inst-pdf").textContent = lk ? "Télécharger le planning (PDF)" : "Télécharger et verrouiller (PDF)";
+  resetPdfConfirm();
   let h = `<thead><tr class="halves"><th class="who"></th>`;
   for (const d of [...new Set(ROTS.map(r => r.demi))]) h += `<th class="sep" colspan="${ROTS.filter(r => r.demi === d).length}">${esc(d)}</th>`;
   h += `</tr><tr><th class="who">Participant</th>`;
@@ -466,8 +496,8 @@ function renderInstPanel(force) {
   h += `</tr></thead><tbody>`;
   if (!rows.length) h += `<tr><td class="who" colspan="${ROTS.length + 1}"><span class="sub">Aucun participant. Clique « + Ajouter un participant ».</span></td></tr>`;
   for (const row of rows) {
-    h += `<tr data-row="${row.key}"><th class="who"><div class="who-in"><input type="text" value="${esc(row.nom)}" maxlength="120" aria-label="Nom du participant" data-name="${row.key}"><button type="button" class="x" data-remove="${row.key}" title="Retirer ce participant" aria-label="Retirer ${esc(row.nom)}">✕</button></div><div class="who-meta" data-meta="${row.key}"></div></th>`;
-    for (const r of ROTS) h += `<td class="${r.sep ? "sep" : ""}"><select data-cell="${row.key}|${r.key}" aria-label="${esc(row.nom)}, tournante ${r.n}">${optionsHtml(r.key, row.plan[r.key] || "", c, true)}</select></td>`;
+    h += `<tr data-row="${row.key}"><th class="who"><div class="who-in"><input type="text" value="${esc(row.nom)}" maxlength="120" aria-label="Nom du participant" data-name="${row.key}"${dis}>${lk ? "" : `<button type="button" class="x" data-remove="${row.key}" title="Retirer ce participant" aria-label="Retirer ${esc(row.nom)}">✕</button>`}</div><div class="who-meta" data-meta="${row.key}"></div></th>`;
+    for (const r of ROTS) h += `<td class="${r.sep ? "sep" : ""}"><select data-cell="${row.key}|${r.key}" aria-label="${esc(row.nom)}, tournante ${r.n}"${dis}>${optionsHtml(r.key, row.plan[r.key] || "", c, true)}</select></td>`;
     h += `</tr>`;
   }
   $("inst-grid").innerHTML = h + `</tbody>`;
@@ -481,6 +511,7 @@ function paintRow(row) {
     const s = $("inst-grid").querySelector(`[data-cell="${row.key}|${r.key}"]`); if (!s) continue;
     const v = row.plan[r.key] || "";
     s.classList.toggle("missing", !v); s.classList.toggle("dup", d.has(r.key)); s.classList.toggle("pause", v === PAUSE);
+    s.classList.toggle("auto", !!row.auto?.has(r.key));
     s.title = d.has(r.key) ? "Activité déjà prévue à une autre tournante" : "";
   }
   const meta = $("inst-grid").querySelector(`[data-meta="${row.key}"]`);
@@ -508,9 +539,13 @@ function renderInstChecks() {
     ok(sameName === 0, sameName ? `${sameName} nom${sameName > 1 ? "s" : ""} en double` : "pas de nom en double"),
     `<span><b>${done}/${rows.length}</b>&nbsp;plannings complets</span>`,
   ].join("");
-  const dirty = isDirty(currentInst);
-  $("inst-save").disabled = !dirty; $("inst-discard").hidden = !dirty;
+  const dirty = isDirty(currentInst), lk = locked(currentInst);
+  $("inst-save").hidden = lk;
+  $("inst-save").disabled = !dirty; $("inst-discard").hidden = !dirty || lk;
   $("inst-save").textContent = dirty ? "Enregistrer " + inst.nom : "Tout est enregistré";
+  const hasAuto = rows.some(r => r.auto?.size);
+  $("inst-auto").textContent = hasAuto ? "Proposer une autre variante" : "Remplir automatiquement les cases vides";
+  $("inst-hint").hidden = !hasAuto || lk;
 }
 function instMsg(t, kind) { const m = $("inst-msg"); m.textContent = t; m.className = "msg " + (kind || ""); }
 
@@ -519,7 +554,7 @@ $("inst-grid").addEventListener("change", e => {
   const [rowKey, rkey] = s.dataset.cell.split("|");
   const row = ensureDraft(currentInst).rows.find(r => r.key === rowKey); if (!row) return;
   if (s.value) row.plan[rkey] = s.value; else delete row.plan[rkey];
-  row.changed = true;
+  row.changed = true; row.auto?.delete(rkey);   // choisi à la main : ne bougera plus avec les variantes
   refreshColumn(rkey); paintRow(row); renderInstChecks(); renderInstCards(); renderStats();
 });
 $("inst-grid").addEventListener("input", e => {
@@ -546,42 +581,70 @@ $("inst-add").addEventListener("click", () => {
   const d = ensureDraft(currentInst);
   let n = d.rows.length + 1;
   while (d.rows.some(r => r.nom.toLowerCase() === ("participant " + n))) n++;
-  d.rows.push({ key: "new" + (++newKey), id: null, nom: "Participant " + n, plan: {}, changed: true });
+  d.rows.push({ key: "new" + (++newKey), id: null, nom: "Participant " + n, plan: {}, changed: true, auto: new Set() });
   renderInstPanel(true); renderInstCards();
   const inputs = $("inst-grid").querySelectorAll("[data-name]"); const last = inputs[inputs.length - 1];
   if (last) { last.focus(); last.select(); }
 });
-$("inst-discard").addEventListener("click", () => { delete drafts[currentInst]; instMsg("Modifications annulées."); renderAll(); renderInstPanel(true); });
+$("inst-discard").addEventListener("click", () => { delete drafts[currentInst]; variantNo = 0; instMsg("Modifications annulées."); renderAll(); renderInstPanel(true); });
 
-// Remplissage automatique : seulement les cases vides, en respectant les places
-// restantes et sans redonner une activité déjà faite par le participant.
+// Remplissage automatique. Chaque clic propose une nouvelle variante :
+// - les cases choisies à la main et le planning déjà enregistré ne bougent pas ;
+// - les cases proposées au clic précédent (bordure bleue) sont tirées à nouveau ;
+// - respecte les places restantes et évite de refaire une activité déjà faite.
+function pickWeighted(list, weight) {
+  const tot = list.reduce((s, x) => s + weight(x), 0);
+  let r = Math.random() * tot;
+  for (const x of list) { r -= weight(x); if (r <= 0) return x; }
+  return list[list.length - 1];
+}
+const shuffle = arr => { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+let variantNo = 0;
 $("inst-auto").addEventListener("click", () => {
-  const d = ensureDraft(currentInst), c = counts(null);
+  if (locked(currentInst)) return;
+  const d = ensureDraft(currentInst);
+  let rerolled = 0;
+  for (const row of d.rows) { row.auto ||= new Set(); for (const k of row.auto) { delete row.plan[k]; rerolled++; } row.auto.clear(); }
+  const c = counts(null);
   let n = 0, repeats = 0, impossible = 0;
   const reste = (rk, a) => a.cap - (c[rk + "|" + a.id] || 0);
-  ROTS.forEach((r, ti) => {
-    const order = d.rows.map((row, i) => d.rows[(i + ti) % d.rows.length]); // varie l'ordre à chaque tournante
-    for (const row of order) {
+  for (const r of shuffle(ROTS)) {
+    for (const row of shuffle(d.rows)) {
       if (row.plan[r.key]) continue;
       const done = Object.values(row.plan);
       const libres = ACTIVITES.filter(a => reste(r.key, a) > 0);
-      // 1) une activité pas encore faite, là où il reste le plus de places ;
+      // 1) une activité pas encore faite, tirée au sort (plus de chances là où il reste plus de places) ;
       // 2) sinon (tout ce qui reste est complet) : l'activité la moins répétée, signalée en orange.
-      let cands = libres.filter(a => !done.includes(a.id)).sort((x, y) => reste(r.key, y) - reste(r.key, x));
-      if (!cands.length) {
-        cands = libres.sort((x, y) => done.filter(v => v === x.id).length - done.filter(v => v === y.id).length || reste(r.key, y) - reste(r.key, x));
-        if (cands.length) repeats++;
+      let a = null;
+      const neuves = libres.filter(a => !done.includes(a.id));
+      if (neuves.length) a = pickWeighted(neuves, x => reste(r.key, x));
+      else if (libres.length) {
+        const min = Math.min(...libres.map(x => done.filter(v => v === x.id).length));
+        a = pickWeighted(libres.filter(x => done.filter(v => v === x.id).length === min), x => reste(r.key, x));
+        repeats++;
       }
-      if (!cands.length) { impossible++; continue; }
-      const a = cands[0];
-      row.plan[r.key] = a.id; row.changed = true; c[r.key + "|" + a.id] = (c[r.key + "|" + a.id] || 0) + 1; n++;
+      if (!a) { impossible++; continue; }
+      row.plan[r.key] = a.id; row.auto.add(r.key); row.changed = true;
+      c[r.key + "|" + a.id] = (c[r.key + "|" + a.id] || 0) + 1; n++;
     }
-  });
+  }
   renderInstPanel(true); renderInstCards(); renderStats();
-  let m = n ? `${n} case${n > 1 ? "s" : ""} remplie${n > 1 ? "s" : ""}. Vérifie, ajuste si besoin, puis clique « Enregistrer ».` : (impossible ? "" : "Aucune case vide à remplir.");
+  let m = n ? (rerolled ? `Variante ${++variantNo} : ${n} case${n > 1 ? "s" : ""} proposée${n > 1 ? "s" : ""}.` : (variantNo = 1, `${n} case${n > 1 ? "s" : ""} remplie${n > 1 ? "s" : ""}.`)) + " Vérifie, ajuste si besoin, puis clique « Enregistrer »."
+    : (impossible ? "" : "Aucune case vide à remplir. Pour tout repartir de zéro, clique « Tout vider ».");
   if (repeats) m += ` ${repeats} fois, il ne restait que des activités déjà faites : elles sont en orange, change-les si tu préfères une pause.`;
   if (impossible) m += ` ${impossible} case${impossible > 1 ? "s" : ""} sans aucune place disponible.`;
   instMsg(m.trim(), impossible ? "err" : "ok");
+});
+// Tout vider (dans le brouillon seulement : rien n'est effacé tant qu'on n'a pas enregistré).
+$("inst-clear").addEventListener("click", () => {
+  const b = $("inst-clear");
+  if (!b.dataset.confirm) { b.dataset.confirm = "1"; b.textContent = "Confirmer : tout vider ?"; setTimeout(() => { delete b.dataset.confirm; b.textContent = "Tout vider"; }, 4000); return; }
+  delete b.dataset.confirm; b.textContent = "Tout vider";
+  const d = ensureDraft(currentInst);
+  for (const row of d.rows) { row.plan = {}; row.auto = new Set(); row.changed = true; }
+  variantNo = 0;
+  renderInstPanel(true); renderInstCards(); renderStats();
+  instMsg("Planning vidé (pas encore enregistré). Clique « Remplir automatiquement » ou choisis les activités, puis « Enregistrer ». « Annuler mes modifications » revient au planning enregistré.");
 });
 $("inst-save").addEventListener("click", async () => {
   const d = drafts[currentInst]; if (!d) return;
@@ -604,6 +667,22 @@ $("inst-save").addEventListener("click", async () => {
 });
 window.addEventListener("beforeunload", e => { if (Object.keys(drafts).length) { e.preventDefault(); e.returnValue = ""; } });
 
+/* ---------- Déverrouillage (organisateur uniquement) ---------- */
+$("unlock-open").addEventListener("click", () => { $("unlock-open").hidden = true; $("unlock-form").hidden = false; $("unlock-code").focus(); });
+$("unlock-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const c = $("unlock-code").value; if (!c) return;
+  $("unlock-btn").disabled = true;
+  try {
+    await rpc("apa_deverrouiller", { p_code_admin: c, p_institution: currentInst });
+    $("unlock-code").value = ""; $("unlock-form").hidden = true; $("unlock-open").hidden = false;
+    lastSig = null; await refresh(); renderInstPanel(true);
+    instMsg(`${INST[currentInst].nom} est déverrouillé : le planning peut de nouveau être modifié.`, "ok");
+  } catch (err) {
+    instMsg(err.code === "28000" ? "Code organisateur incorrect." : err.message, "err");
+  } finally { $("unlock-btn").disabled = false; }
+});
+
 /* ---------- Planning PDF de l'institution ---------- */
 function loadScript(src) {
   return new Promise((ok, ko) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => ko(new Error(src)); document.head.appendChild(s); });
@@ -617,12 +696,30 @@ const LIEU_RGB = { P1: [253, 233, 224], P2: [220, 243, 232], P3: [238, 227, 251]
 const INK = [24, 32, 58], MUTED = [91, 100, 128], RED = [192, 57, 43], REDSOFT = [251, 226, 223];
 const slug = s => s.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase();
 
+function resetPdfConfirm() { const b = $("inst-pdf"); if (b.dataset.confirm) { delete b.dataset.confirm; b.textContent = locked(currentInst) ? "Télécharger le planning (PDF)" : "Télécharger et verrouiller (PDF)"; } }
 $("inst-pdf").addEventListener("click", async () => {
   const id = currentInst, inst = INST[id]; if (!inst) return;
   if (isDirty(id)) { instMsg("Enregistre d'abord tes modifications : le PDF reprend le planning enregistré.", "err"); return; }
   const rows = people.filter(p => p.institution === id).sort(byName);
   if (!rows.length) { instMsg("Aucun participant à mettre dans le planning.", "err"); return; }
-  const btn = $("inst-pdf"); btn.disabled = true; instMsg("Préparation du PDF…");
+  const btn = $("inst-pdf");
+  // Premier clic : on explique que le planning sera verrouillé. Deuxième clic : on verrouille puis on télécharge.
+  if (!locked(id) && !btn.dataset.confirm) {
+    const missing = rows.reduce((s, p) => s + (ROTS.length - filled(p.plan)), 0);
+    btn.dataset.confirm = "1"; btn.textContent = "Confirmer : verrouiller et télécharger";
+    instMsg(`Après le téléchargement, le planning de ${inst.nom} sera verrouillé : plus personne ne pourra le modifier, sauf l'organisateur.${missing ? ` Attention, il reste ${missing} case${missing > 1 ? "s" : ""} vide${missing > 1 ? "s" : ""}.` : ""}`, missing ? "err" : "");
+    return;
+  }
+  delete btn.dataset.confirm;
+  btn.disabled = true;
+  try {
+    if (!locked(id)) {
+      instMsg("Verrouillage…");
+      await rpc("apa_verrouiller", { p_code: code, p_institution: id });
+      lastSig = null; await refresh(); renderInstPanel(true);
+    }
+  } catch (err) { btn.disabled = false; instMsg(err.message, "err"); return; }
+  instMsg("Préparation du PDF…");
   try {
     const jsPDF = await loadPdfLib();
     const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
@@ -715,7 +812,7 @@ $("inst-pdf").addEventListener("click", async () => {
       doc.text(`${inst.nom} · page ${i}/${n}`, pw - 8, ph - 4, { align: "right" });
     }
     doc.save(`planning-apa-${slug(inst.nom)}.pdf`);
-    instMsg(`PDF téléchargé : planning-apa-${slug(inst.nom)}.pdf`, "ok");
+    instMsg(`PDF téléchargé : planning-apa-${slug(inst.nom)}.pdf. Le planning est verrouillé.`, "ok");
   } catch (err) {
     instMsg("Le PDF n'a pas pu être créé. Recharge la page et réessaie.", "err");
   } finally { btn.disabled = false; }
@@ -743,7 +840,7 @@ function refreshSelects(force) {
   if (!force && $("form").contains(document.activeElement)) { formPending = true; return; }
   formPending = false;
   const instSel = $("institution"), iv = instSel.value;
-  instSel.innerHTML = `<option value="">— Aucune (inscription individuelle) —</option>` + INSTS.map(i => `<option value="${i.id}">${esc(i.nom)}</option>`).join("");
+  instSel.innerHTML = `<option value="">— Aucune (inscription individuelle) —</option>` + INSTS.map(i => `<option value="${i.id}"${locked(i.id) ? " disabled" : ""}>${esc(i.nom)}${locked(i.id) ? " (verrouillé)" : ""}</option>`).join("");
   instSel.value = INST[iv] ? iv : "";
   const c = counts(editingId), chosen = {};
   for (const r of ROTS) chosen[r.key] = $("sel-" + r.key).value;
@@ -880,7 +977,7 @@ function renderPeople() {
     const n = filled(p.plan);
     const plan = ROTS.filter(r => p.plan && p.plan[r.key]).map(r => `<span>T${r.n} ${hm(r.debut)} <em>${esc(ACT[p.plan[r.key]]?.nom || "?")}</em></span>`).join("");
     return `<div class="person"><div class="who"><b>${esc(p.nom)}</b><span>${esc([instName(p.institution), p.groupe].filter(Boolean).join(" · "))}</span> <span class="pill ${n === ROTS.length ? "ok" : "todo"}">${n}/${ROTS.length}</span></div>
-      <div class="btns"><button class="btn small" data-edit="${p.id}">Modifier</button><button class="btn small danger" data-del="${p.id}">Supprimer</button></div>
+      <div class="btns">${locked(p.institution) ? `<span class="pill lock">🔒 verrouillé</span><button class="btn small" data-edit="${p.id}">Voir</button>` : `<button class="btn small" data-edit="${p.id}">Modifier</button><button class="btn small danger" data-del="${p.id}">Supprimer</button>`}</div>
       <div class="plan">${plan || "Aucune activité"}</div></div>`;
   }).join("");
 }

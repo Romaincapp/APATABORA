@@ -56,6 +56,10 @@ create table if not exists public.config (
   id        int primary key default 1 check (id = 1),
   code_hash text not null
 );
+-- Code organisateur (admin) : seul à pouvoir déverrouiller une institution.
+alter table public.config add column if not exists admin_hash text;
+-- Date à laquelle l'institution a téléchargé son planning (null = modifiable).
+alter table public.institutions add column if not exists verrouille_le timestamptz;
 
 -- ---------- Sécurité : aucune lecture/écriture directe ----------------
 -- La page passe UNIQUEMENT par les fonctions ci-dessous, qui vérifient
@@ -140,6 +144,42 @@ returns void language sql security definer set search_path = public, extensions 
   on conflict (id) do update set code_hash = excluded.code_hash;
 $$;
 
+-- Code organisateur. À lancer depuis le SQL Editor uniquement :
+--   select public.apa_definir_code_admin('code-organisateur');
+create or replace function public.apa_definir_code_admin(p_nouveau text)
+returns void language plpgsql security definer set search_path = public, extensions as $$
+begin
+  update public.config set admin_hash = crypt(p_nouveau, gen_salt('bf')) where id = 1;
+  if not found then
+    raise exception 'Définis d''abord le code d''équipe avec apa_definir_code.';
+  end if;
+end $$;
+
+create or replace function public._apa_check_admin(p_code text)
+returns void language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if p_code is null or not exists (
+    select 1 from public.config where admin_hash is not null and admin_hash = crypt(p_code, admin_hash)
+  ) then
+    raise exception 'Code organisateur incorrect.' using errcode = '28000';
+  end if;
+end $$;
+
+-- Refuse toute modification d'une institution verrouillée.
+-- Verrouille aussi la ligne de l'institution pendant la transaction, pour qu'un
+-- verrouillage et un enregistrement simultanés ne puissent pas se croiser.
+create or replace function public._apa_check_ouvert(p_institution uuid)
+returns void language plpgsql security definer set search_path = public, extensions as $$
+declare v_nom text; v_le timestamptz;
+begin
+  if p_institution is null then return; end if;
+  select nom, verrouille_le into v_nom, v_le from public.institutions where id = p_institution for update;
+  if v_le is not null then
+    raise exception 'Le planning de % est verrouillé depuis le téléchargement du PDF. Demande à l''organisateur de le déverrouiller.', v_nom
+      using errcode = 'P0004';
+  end if;
+end $$;
+
 -- Vérifie le code (écran de connexion de la page).
 create or replace function public.apa_connexion(p_code text)
 returns boolean language plpgsql security definer set search_path = public, extensions as $$
@@ -156,7 +196,7 @@ begin
   return jsonb_build_object(
     'activites', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'nom', nom, 'lieu', lieu, 'cap', cap) order by ordre), '[]') from public.activites),
     'tournantes', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'debut', to_char(debut, 'HH24:MI'), 'fin', to_char(fin, 'HH24:MI'), 'demi', demi) order by id), '[]') from public.tournantes),
-    'institutions', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'nom', nom, 'nb_attendu', nb_attendu) order by ordre, nom), '[]') from public.institutions),
+    'institutions', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'nom', nom, 'nb_attendu', nb_attendu, 'verrouille_le', verrouille_le) order by ordre, nom), '[]') from public.institutions),
     'beneficiaires', (
       select coalesce(jsonb_agg(jsonb_build_object(
         'id', b.id, 'nom', b.nom, 'groupe', b.groupe, 'maj', b.updated_at, 'institution', b.institution_id,
@@ -201,6 +241,12 @@ begin
   end if;
   if p_plan is null or jsonb_typeof(p_plan) <> 'object' or (p_id is null and p_plan = '{}'::jsonb) then
     raise exception 'Choisis au moins une activité.' using errcode = '22023';
+  end if;
+
+  -- Institution(s) concernée(s) : refus si verrouillée.
+  perform public._apa_check_ouvert(p_institution);
+  if v_id is not null then
+    perform public._apa_check_ouvert((select institution_id from public.beneficiaires where id = v_id));
   end if;
 
   -- Verrou global sur les activités (toujours dans le même ordre : pas d'interblocage).
@@ -248,6 +294,7 @@ begin
   if p_lignes is null or jsonb_typeof(p_lignes) <> 'array' or jsonb_array_length(p_lignes) > 300 then
     raise exception 'Liste de participants invalide.' using errcode = '22023';
   end if;
+  perform public._apa_check_ouvert(p_institution);
 
   perform 1 from public.activites order by id for update;
 
@@ -266,6 +313,7 @@ begin
       if not found then
         raise exception '% a été supprimé·e entre-temps.', v_nom using errcode = 'P0002';
       end if;
+      perform public._apa_check_ouvert((select institution_id from public.beneficiaires where id = v_id));
       if l ? 'maj' and (l->>'maj')::timestamptz <> v_maj then
         raise exception 'La fiche de % a été modifiée par quelqu''un d''autre entre-temps.', v_nom using errcode = 'P0003';
       end if;
@@ -288,13 +336,41 @@ create or replace function public.apa_supprimer(p_code text, p_id uuid)
 returns void language plpgsql security definer set search_path = public, extensions as $$
 begin
   perform public._apa_check_code(p_code);
+  perform public._apa_check_ouvert((select institution_id from public.beneficiaires where id = p_id));
   delete from public.beneficiaires where id = p_id;
+end $$;
+
+-- Verrouille le planning d'une institution (appelé au téléchargement du PDF).
+create or replace function public.apa_verrouiller(p_code text, p_institution uuid)
+returns timestamptz language plpgsql security definer set search_path = public, extensions as $$
+declare v_le timestamptz;
+begin
+  perform public._apa_check_code(p_code);
+  update public.institutions set verrouille_le = coalesce(verrouille_le, now())
+   where id = p_institution returning verrouille_le into v_le;
+  if not found then
+    raise exception 'Institution inconnue.' using errcode = '22023';
+  end if;
+  return v_le;
+end $$;
+
+-- Déverrouille : réservé à l'organisateur (code organisateur).
+create or replace function public.apa_deverrouiller(p_code_admin text, p_institution uuid)
+returns void language plpgsql security definer set search_path = public, extensions as $$
+begin
+  perform public._apa_check_admin(p_code_admin);
+  update public.institutions set verrouille_le = null where id = p_institution;
 end $$;
 
 -- ---------- Droits d'appel --------------------------------------------
 revoke all on function public._apa_check_code(text)      from public, anon, authenticated;
 revoke all on function public._apa_check_capacite()      from public, anon, authenticated;
 revoke all on function public.apa_definir_code(text)     from public, anon, authenticated;
+revoke all on function public.apa_definir_code_admin(text) from public, anon, authenticated;
+revoke all on function public._apa_check_admin(text)     from public, anon, authenticated;
+revoke all on function public._apa_check_ouvert(uuid)    from public, anon, authenticated;
+grant execute on function public.apa_verrouiller(text, uuid)                          to anon, authenticated;
+grant execute on function public.apa_deverrouiller(text, uuid)                        to anon, authenticated;
 grant execute on function public.apa_connexion(text)                                  to anon, authenticated;
 grant execute on function public.apa_etat(text)                                       to anon, authenticated;
 grant execute on function public.apa_enregistrer(text, uuid, text, text, jsonb, uuid) to anon, authenticated;
