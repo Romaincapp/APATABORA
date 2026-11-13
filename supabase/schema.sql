@@ -227,6 +227,6 @@ grant execute on function public.apa_supprimer(text, uuid)                    to
 -- ⚠ Remplace 'change-moi' par le code à donner aux collègues avant le premier lancement.
 do $$ begin
   if not exists (select 1 from public.config) then
-    perform public.apa_definir_code('change-moi');
+    perform public.apa_definir_code('APATABORA');
   end if;
 end $$;
