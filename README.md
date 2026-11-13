@@ -12,10 +12,14 @@ Inscriptions des bénéficiaires aux activités de la **Journée APA du 17 novem
 ### 1. Base de données Supabase
 
 1. Sur https://supabase.com, clique sur **New project** (le plan gratuit suffit, région EU).
-2. Dans `supabase/schema.sql`, remplace `change-moi` (en bas du fichier) par le
-   **code d'équipe** à donner aux collègues. Choisis-le long (ex. `ursule-apa-2026-kinball`).
-   Ne commite pas ce code : modifie-le seulement dans la copie que tu colles.
-3. Dans Supabase : **SQL Editor** → **New query** → colle le fichier → **Run**.
+2. Dans Supabase : **SQL Editor** → **New query** → colle `supabase/schema.sql` → **Run**.
+3. Définis le **code d'équipe** (toujours dans le SQL Editor, jamais dans un fichier du dépôt) :
+   ```sql
+   select public.apa_definir_code('ton-code');
+   ```
+4. Charge les institutions et leurs participants avec le fichier
+   `institutions-participants.sql`. Ce fichier n'est **pas** dans le dépôt, car il contient
+   des noms : garde-le en local. Il peut être relancé sans créer de doublons.
 
 ### 2. Configuration GitHub
 
@@ -30,6 +34,26 @@ Chaque modification de `site/` poussée sur `main` redéploie la page automatiqu
 
 La clé publique sera visible dans la page, c'est normal : sans le code d'équipe, elle ne
 permet ni de lire les noms ni d'écrire.
+
+## Utilisation par les éducateurs
+
+Onglet **Par institution** : l'éducateur choisit son institution, et ses participants
+s'affichent en tableau (une ligne par participant, une colonne par tournante).
+
+- Il choisit une activité ou **Pause / repos** dans chaque case. Les places restantes
+  s'affichent dans chaque menu, et une activité complète ne peut pas être choisie.
+- **Remplir automatiquement les cases vides** propose un planning complet qui respecte
+  les places et évite de refaire la même activité. Il reste à vérifier, puis enregistrer.
+- **Contrôles anti-oubli** : les cases vides sont en rouge, les activités faites deux fois
+  sont en orange, et le nombre de participants est comparé au nombre annoncé.
+- Les noms sont modifiables (ex. remplacer « Participant 3 » par le vrai nom), et on
+  peut ajouter ou retirer un participant.
+- **Enregistrer** envoie toute l'institution d'un coup. Si une place a été prise
+  entre-temps, ou si un collègue a modifié la même fiche, rien n'est enregistré et la page
+  explique quoi corriger.
+
+Onglet **Inscription individuelle** : pour une personne seule ou un ajout de dernière
+minute.
 
 ## Horaires
 
@@ -56,13 +80,16 @@ select public.apa_definir_code('nouveau-code');
 
 ## Comment ça marche
 
-- La page n'accède jamais directement aux tables. Elle passe par 4 fonctions SQL
-  (`apa_connexion`, `apa_etat`, `apa_enregistrer`, `apa_supprimer`) qui vérifient toutes
-  le code d'équipe.
-- **Places garanties** : `apa_enregistrer` verrouille les activités concernées, enregistre,
-  puis recompte. Si une place manque, tout est annulé et la page affiche « Plus de place
-  pour : … ». Test effectué : 10 inscriptions simultanées sur la dernière place donnent
-  1 acceptée et 9 refusées.
+- La page n'accède jamais directement aux tables. Elle passe par 5 fonctions SQL
+  (`apa_connexion`, `apa_etat`, `apa_enregistrer`, `apa_enregistrer_lot`, `apa_supprimer`)
+  qui vérifient toutes le code d'équipe.
+- **Places garanties** : les fonctions d'enregistrement verrouillent les activités,
+  enregistrent, puis recomptent. Si une place manque, tout est annulé et la page affiche
+  « Plus de place pour : … ». Tests effectués : 10 inscriptions simultanées sur la
+  dernière place donnent 1 acceptée et 9 refusées ; 4 institutions qui enregistrent en
+  même temps sur la dernière place donnent 1 acceptée et 3 refusées.
+- Si deux personnes modifient la même fiche, la deuxième est prévenue au lieu d'écraser
+  le travail de la première.
 - Une seule activité par tournante et par bénéficiaire (garanti par la base).
 - La page se met à jour toutes les 5 secondes.
 - Export CSV (ouvrable dans Excel) par bénéficiaire ou par activité.

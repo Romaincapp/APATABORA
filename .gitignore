@@ -1,0 +1,4 @@
+# Données personnelles : ne jamais publier
+supabase/institutions*.sql
+supabase/donnees*.sql
+*participants*.sql
