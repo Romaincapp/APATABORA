@@ -125,6 +125,40 @@ body { margin: 0; }
 .topline { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
 .sync { font-size: 13px; color: var(--muted); }
 .sync.err { color: var(--full); }
+
+/* Par institution */
+.insts { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+.inst { text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; cursor: pointer; font: inherit; color: var(--fg); display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.inst[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.inst b { font-size: 15px; }
+.inst .bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.inst .bar i { display: block; height: 100%; background: var(--ok); }
+.inst small { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: var(--line); color: var(--muted); }
+.pill.ok { background: var(--p2-soft); color: var(--ok); }
+.pill.todo { background: var(--full-soft); color: var(--full); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.draft { background: var(--accent-soft); color: var(--accent); }
+.checks { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 14px; }
+.checks span { display: inline-flex; gap: 6px; align-items: center; }
+.sticky-actions { position: sticky; bottom: 0; background: var(--surface); border-top: 1px solid var(--line); padding-block: 10px; margin: 0 -18px -18px; padding-left: 18px; padding-right: 18px; border-radius: 0 0 12px 12px; z-index: 3; }
+
+table.inst-grid { border-collapse: separate; border-spacing: 0; font-size: 13px; }
+table.inst-grid th, table.inst-grid td { border-bottom: 1px solid var(--line); padding: 4px 3px; }
+table.inst-grid thead th { position: sticky; top: 0; background: var(--surface); z-index: 2; font-weight: 700; text-align: center; white-space: nowrap; font-variant-numeric: tabular-nums; }
+table.inst-grid thead tr.halves th { font-family: var(--f-display); color: var(--muted); }
+table.inst-grid .who { position: sticky; left: 0; background: var(--surface); z-index: 1; min-width: 210px; border-right: 1px solid var(--line); text-align: left; }
+table.inst-grid thead .who { z-index: 3; }
+.who-in { display: flex; gap: 6px; align-items: center; }
+.who-in input { padding: 6px 8px; font-size: 14px; }
+.who-meta { display: flex; gap: 6px; align-items: center; margin-top: 3px; }
+.x { background: none; border: 0; color: var(--muted); cursor: pointer; font: 700 12px var(--f-body); padding: 2px 4px; border-radius: 4px; }
+.x:hover, .x.confirm { color: var(--full); }
+table.inst-grid select { width: 128px; padding: 5px 4px; font-size: 12px; border-radius: 6px; }
+table.inst-grid select.missing { border: 1px dashed var(--full); background: var(--full-soft); }
+table.inst-grid select.dup { border-color: var(--warn); background: var(--warn-soft); }
+table.inst-grid select.pause { color: var(--muted); }
+table.inst-grid .sep { border-left: 2px solid var(--line); }
 </style>
 </head>
 <body>
@@ -135,7 +169,7 @@ body { margin: 0; }
       <button class="btn small" id="logout" type="button" hidden>Se déconnecter</button>
     </div>
     <h1>Inscriptions aux activités</h1>
-    <p class="sub">Inscris chaque bénéficiaire sur les 15 tournantes de 15 minutes (5 minutes de changement en musique entre chaque). Accueil des bénéficiaires dès 9h30.</p>
+    <p class="sub">15 tournantes de 15 minutes, avec 5 minutes de changement en musique entre chaque. Accueil des bénéficiaires dès 9h30.</p>
     <div class="stats" id="stats"></div>
   </header>
 
@@ -153,24 +187,53 @@ body { margin: 0; }
 
   <div id="app" hidden>
     <nav class="tabs" role="tablist">
-      <button role="tab" id="tab-inscrire" aria-selected="true" data-view="inscrire">Inscrire</button>
+      <button role="tab" id="tab-institution" aria-selected="true" data-view="institution">Par institution</button>
+      <button role="tab" id="tab-inscrire" aria-selected="false" data-view="inscrire">Inscription individuelle</button>
       <button role="tab" id="tab-planning" aria-selected="false" data-view="planning">Planning des places</button>
-      <button role="tab" id="tab-inscrits" aria-selected="false" data-view="inscrits">Bénéficiaires inscrits</button>
+      <button role="tab" id="tab-inscrits" aria-selected="false" data-view="inscrits">Tous les inscrits</button>
     </nav>
     <main>
       <div id="notice" class="notice" hidden></div>
 
-      <section id="view-inscrire" class="stack">
+      <!-- ======== Par institution ======== -->
+      <section id="view-institution" class="stack">
+        <div>
+          <p class="sub" style="margin-bottom:10px">Choisis ton institution : tes participants s'affichent, tu leur attribues une activité (ou une pause) pour chaque tournante.</p>
+          <div class="insts" id="insts"></div>
+        </div>
+        <div class="panel stack" id="inst-panel" hidden>
+          <div class="topline">
+            <h2 id="inst-title"></h2>
+            <div class="actions">
+              <button class="btn small" type="button" id="inst-add">+ Ajouter un participant</button>
+              <button class="btn small" type="button" id="inst-auto">Remplir automatiquement les cases vides</button>
+            </div>
+          </div>
+          <div class="checks" id="inst-checks"></div>
+          <div class="scroll" id="inst-scroll"><table class="inst-grid" id="inst-grid"></table></div>
+          <div class="actions sticky-actions">
+            <button class="btn primary" type="button" id="inst-save">Enregistrer</button>
+            <button class="btn" type="button" id="inst-discard">Annuler mes modifications</button>
+            <span class="msg" id="inst-msg" role="status"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ======== Individuel ======== -->
+      <section id="view-inscrire" class="stack" hidden>
         <form id="form" class="panel stack" autocomplete="off">
           <div class="half-title"><h2 id="form-title">Nouveau bénéficiaire</h2></div>
           <div class="fields">
             <label class="f" for="nom">Nom et prénom
               <input type="text" id="nom" required maxlength="120" placeholder="ex. Lucas Martin">
             </label>
-            <label class="f" for="groupe">Groupe / institution / éducateur
-              <input type="text" id="groupe" maxlength="120" placeholder="ex. Groupe des Lilas">
+            <label class="f" for="institution">Institution
+              <select id="institution"></select>
             </label>
           </div>
+          <label class="f" for="groupe">Remarque (facultatif)
+            <input type="text" id="groupe" maxlength="120" placeholder="ex. fauteuil roulant, accompagné par…">
+          </label>
           <div id="rotations"></div>
           <div class="actions">
             <button class="btn primary" type="submit" id="save">Enregistrer l'inscription</button>
@@ -180,6 +243,7 @@ body { margin: 0; }
         </form>
       </section>
 
+      <!-- ======== Planning ======== -->
       <section id="view-planning" class="stack" hidden>
         <div>
           <div class="scroll"><table class="grid" id="grid"></table></div>
@@ -193,9 +257,13 @@ body { margin: 0; }
         <div class="panel detail" id="detail"><p class="sub">Sélectionne une case ou une activité.</p></div>
       </section>
 
+      <!-- ======== Liste ======== -->
       <section id="view-inscrits" hidden>
         <div class="toolbar">
-          <input type="text" id="search" placeholder="Rechercher un nom ou un groupe">
+          <div class="actions">
+            <input type="text" id="search" placeholder="Rechercher un nom">
+            <select id="filter-inst" aria-label="Filtrer par institution"></select>
+          </div>
           <div class="actions">
             <span class="sub" id="count"></span>
             <button class="btn small" type="button" id="csv-benef">Exporter par bénéficiaire (CSV)</button>
@@ -219,25 +287,33 @@ const SUPABASE_KEY = "VOTRE-CLE-PUBLIQUE";
 const RAFRAICHISSEMENT_MS = 5000;
 /* =================================================== */
 
-let ACTIVITES = [], ACT = {}, ROTS = [];
+const PAUSE = "pause";
+let ACTIVITES = [], ACT = {}, ROTS = [], INSTS = [], INST = {};
 let people = [];
 let editingId = null, code = null, loaded = false, busy = false;
+let currentInst = null, lastSig = null;
+const drafts = {};          // institution id -> { rows: [...] }  (modifications pas encore enregistrées)
+let newKey = 0;
 const $ = id => document.getElementById(id);
 const hm = s => s.replace(":", "h").replace(/^0/, "");
 const plage = r => hm(r.debut) + "–" + hm(r.fin);
+const byName = (a, b) => a.nom.localeCompare(b.nom, "fr", { numeric: true, sensitivity: "base" });
+const instName = id => INST[id]?.nom || "";
+const label = p => p.nom + (p.institution ? " · " + instName(p.institution) : "");
 
 /* ---------- Appels Supabase (fonctions SQL uniquement) ---------- */
+const API = SUPABASE_URL.trim().replace(/\/+$/, "").replace(/\/rest\/v1$/, "");
 async function rpc(fn, args) {
   const headers = { "Content-Type": "application/json", apikey: SUPABASE_KEY };
   if (SUPABASE_KEY.startsWith("eyJ")) headers.Authorization = "Bearer " + SUPABASE_KEY;
   let res;
   try {
-    res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, { method: "POST", headers, body: JSON.stringify(args) });
+    res = await fetch(`${API}/rest/v1/rpc/${fn}`, { method: "POST", headers, body: JSON.stringify(args) });
   } catch {
     throw { code: "reseau", message: "Pas de connexion au serveur. Vérifie Internet et réessaie." };
   }
   const txt = await res.text();
-  const body = txt ? JSON.parse(txt) : null;
+  let body = null; try { body = txt ? JSON.parse(txt) : null; } catch {}
   if (!res.ok) throw { code: body?.code || String(res.status), message: body?.message || "Erreur serveur (" + res.status + ")." };
   return body;
 }
@@ -263,7 +339,7 @@ $("logout").addEventListener("click", () => { setSaved(null); location.reload();
 
 function enterApp() {
   $("login").hidden = true; $("app").hidden = false; $("logout").hidden = false;
-  try { const t = localStorage.getItem("apa-tab"); if (t) show(t); } catch {}
+  try { const t = localStorage.getItem("apa-tab"); if (t && $("view-" + t)) show(t); } catch {}
   refresh();
   setInterval(() => { if (!document.hidden) refresh(); }, RAFRAICHISSEMENT_MS);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
@@ -274,11 +350,21 @@ async function refresh() {
   busy = true;
   try {
     const etat = await rpc("apa_etat", { p_code: code });
+    const sig = JSON.stringify(etat);
+    $("sync").textContent = "À jour à " + new Date().toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    $("sync").className = "sync";
+    if (sig === lastSig) return;          // rien n'a changé : on ne redessine pas
+    lastSig = sig;
     const firstLoad = !ROTS.length;
-    ACTIVITES = etat.activites; ACT = Object.fromEntries(ACTIVITES.map(a => [a.id, a]));
+    ACT = Object.fromEntries(etat.activites.map(a => [a.id, a]));
+    ACTIVITES = etat.activites.filter(a => a.id !== PAUSE);
     ROTS = etat.tournantes.map((t, i, all) => ({ ...t, key: String(t.id), n: t.id, sep: i === 0 || t.demi !== all[i - 1].demi }));
+    INSTS = etat.institutions || []; INST = Object.fromEntries(INSTS.map(i => [i.id, i]));
     people = etat.beneficiaires;
-    if (firstLoad) buildRotations();
+    if (firstLoad) {
+      buildRotations();
+      try { const s = localStorage.getItem("apa-inst"); if (s && INST[s]) currentInst = s; } catch {}
+    }
     loaded = true;
     $("sync").textContent = "À jour à " + new Date().toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
     $("sync").className = "sync";
@@ -290,19 +376,234 @@ async function refresh() {
   } finally { busy = false; }
 }
 
-/* ---------- Calculs ---------- */
+/* ---------- Comptage des places (inclut les modifications pas encore enregistrées) ---------- */
+function draftIds() { const s = new Set(); for (const d of Object.values(drafts)) for (const r of d.rows) if (r.id) s.add(r.id); return s; }
 function counts(excludeId) {
-  const c = {};
-  for (const p of people) {
-    if (p.id === excludeId) continue;
-    for (const [k, a] of Object.entries(p.plan || {})) c[k + "|" + a] = (c[k + "|" + a] || 0) + 1;
-  }
+  const c = {}, skip = draftIds();
+  const add = plan => { for (const [k, a] of Object.entries(plan || {})) if (a && a !== PAUSE) c[k + "|" + a] = (c[k + "|" + a] || 0) + 1; };
+  for (const p of people) if (p.id !== excludeId && !skip.has(p.id)) add(p.plan);
+  for (const d of Object.values(drafts)) for (const r of d.rows) if (r.id !== excludeId) add(r.plan);
   return c;
 }
-const namesAt = (rkey, aid) => people.filter(p => p.plan && p.plan[rkey] === aid).map(p => p.nom).sort((x, y) => x.localeCompare(y, "fr"));
+const savedCounts = () => { const c = {}; for (const p of people) for (const [k, a] of Object.entries(p.plan || {})) if (a !== PAUSE) c[k + "|" + a] = (c[k + "|" + a] || 0) + 1; return c; };
+const namesAt = (rkey, aid) => people.filter(p => p.plan && p.plan[rkey] === aid).sort(byName).map(label);
 const totalPlaces = () => ACTIVITES.reduce((s, a) => s + a.cap, 0) * ROTS.length;
+const filled = plan => ROTS.filter(r => plan && plan[r.key]).length;
+const isComplete = plan => filled(plan) === ROTS.length;
+function dupKeys(plan) {          // tournantes où l'activité est déjà faite à une autre tournante
+  const seen = {}, d = new Set();
+  for (const r of ROTS) { const a = plan[r.key]; if (!a || a === PAUSE) continue; (seen[a] ||= []).push(r.key); }
+  for (const ks of Object.values(seen)) if (ks.length > 1) ks.forEach(k => d.add(k));
+  return d;
+}
 
-/* ---------- Formulaire ---------- */
+/* ---------- Options d'activité pour un menu ---------- */
+function optionsHtml(rkey, cur, c, short) {
+  let h = `<option value="">${short ? "· à choisir ·" : "— À choisir —"}</option><option value="${PAUSE}">Pause / repos</option>`;
+  for (const lieu of [...new Set(ACTIVITES.map(a => a.lieu))]) {
+    h += `<optgroup label="Lieu ${esc(lieu)}">`;
+    for (const a of ACTIVITES.filter(x => x.lieu === lieu)) {
+      const reste = a.cap - (c[rkey + "|" + a.id] || 0) + (cur === a.id ? 1 : 0);
+      const txt = short ? `${a.nom} (${reste > 0 ? reste : "complet"})` : `${a.nom} — ${reste > 0 ? reste + " place" + (reste > 1 ? "s" : "") : "complet"}`;
+      h += `<option value="${a.id}"${reste <= 0 && cur !== a.id ? " disabled" : ""}>${esc(txt)}</option>`;
+    }
+    h += `</optgroup>`;
+  }
+  return h;
+}
+
+/* ================= PAR INSTITUTION ================= */
+function instRows(id) {
+  if (drafts[id]) return drafts[id].rows;
+  return people.filter(p => p.institution === id).sort(byName)
+    .map(p => ({ key: p.id, id: p.id, nom: p.nom, maj: p.maj, plan: { ...(p.plan || {}) }, changed: false }));
+}
+function ensureDraft(id) { if (!drafts[id]) drafts[id] = { rows: instRows(id) }; return drafts[id]; }
+const isDirty = id => !!drafts[id];
+
+function renderInstCards() {
+  const box = $("insts");
+  if (!INSTS.length) { box.innerHTML = `<div class="empty-state">${loaded ? "Aucune institution pour l'instant. Utilise l'onglet « Inscription individuelle »." : "Chargement…"}</div>`; return; }
+  box.innerHTML = INSTS.map(i => {
+    const rows = instRows(i.id), done = rows.filter(r => isComplete(r.plan)).length;
+    const pct = rows.length ? Math.round(done / rows.length * 100) : 0;
+    const diff = rows.length - i.nb_attendu;
+    const pills = [
+      isDirty(i.id) ? `<span class="pill draft">non enregistré</span>` : "",
+      rows.length && done === rows.length ? `<span class="pill ok">complet</span>` : "",
+      i.nb_attendu && diff !== 0 ? `<span class="pill warn">${rows.length}/${i.nb_attendu} attendus</span>` : "",
+    ].join(" ");
+    return `<button type="button" class="inst" data-inst="${i.id}" aria-pressed="${i.id === currentInst}">
+      <b>${esc(i.nom)}</b>
+      <small>${rows.length} participant${rows.length > 1 ? "s" : ""} · ${done} planning${done > 1 ? "s" : ""} complet${done > 1 ? "s" : ""}</small>
+      <span class="bar"><i style="width:${pct}%"></i></span>
+      <span>${pills}</span></button>`;
+  }).join("");
+}
+$("insts").addEventListener("click", e => {
+  const b = e.target.closest("[data-inst]"); if (!b) return;
+  currentInst = b.dataset.inst;
+  try { localStorage.setItem("apa-inst", currentInst); } catch {}
+  instMsg("");
+  renderInstCards(); renderInstPanel(true);
+});
+
+let instPending = false;
+function renderInstPanel(force) {
+  const panel = $("inst-panel");
+  if (!currentInst || !INST[currentInst]) { panel.hidden = true; return; }
+  panel.hidden = false;
+  // Ne pas reconstruire le tableau pendant qu'on y tape ou qu'un menu est ouvert.
+  if (!force && $("inst-grid").contains(document.activeElement)) { instPending = true; renderInstChecks(); return; }
+  instPending = false;
+  const inst = INST[currentInst], rows = instRows(currentInst), c = counts(null);
+  $("inst-title").textContent = inst.nom;
+  let h = `<thead><tr class="halves"><th class="who"></th>`;
+  for (const d of [...new Set(ROTS.map(r => r.demi))]) h += `<th class="sep" colspan="${ROTS.filter(r => r.demi === d).length}">${esc(d)}</th>`;
+  h += `</tr><tr><th class="who">Participant</th>`;
+  for (const r of ROTS) h += `<th class="${r.sep ? "sep" : ""}">T${r.n}<br><small style="font-weight:400">${plage(r)}</small></th>`;
+  h += `</tr></thead><tbody>`;
+  if (!rows.length) h += `<tr><td class="who" colspan="${ROTS.length + 1}"><span class="sub">Aucun participant. Clique « + Ajouter un participant ».</span></td></tr>`;
+  for (const row of rows) {
+    h += `<tr data-row="${row.key}"><th class="who"><div class="who-in"><input type="text" value="${esc(row.nom)}" maxlength="120" aria-label="Nom du participant" data-name="${row.key}"><button type="button" class="x" data-remove="${row.key}" title="Retirer ce participant" aria-label="Retirer ${esc(row.nom)}">✕</button></div><div class="who-meta" data-meta="${row.key}"></div></th>`;
+    for (const r of ROTS) h += `<td class="${r.sep ? "sep" : ""}"><select data-cell="${row.key}|${r.key}" aria-label="${esc(row.nom)}, tournante ${r.n}">${optionsHtml(r.key, row.plan[r.key] || "", c, true)}</select></td>`;
+    h += `</tr>`;
+  }
+  $("inst-grid").innerHTML = h + `</tbody>`;
+  for (const row of rows) for (const r of ROTS) $("inst-grid").querySelector(`[data-cell="${row.key}|${r.key}"]`).value = row.plan[r.key] || "";
+  rows.forEach(paintRow);
+  renderInstChecks();
+}
+function paintRow(row) {
+  const d = dupKeys(row.plan), n = filled(row.plan);
+  for (const r of ROTS) {
+    const s = $("inst-grid").querySelector(`[data-cell="${row.key}|${r.key}"]`); if (!s) continue;
+    const v = row.plan[r.key] || "";
+    s.classList.toggle("missing", !v); s.classList.toggle("dup", d.has(r.key)); s.classList.toggle("pause", v === PAUSE);
+    s.title = d.has(r.key) ? "Activité déjà prévue à une autre tournante" : "";
+  }
+  const meta = $("inst-grid").querySelector(`[data-meta="${row.key}"]`);
+  if (meta) meta.innerHTML = `<span class="pill ${n === ROTS.length ? "ok" : "todo"}">${n}/${ROTS.length}</span>${d.size ? `<span class="pill warn">activité en double</span>` : ""}${row.id ? "" : `<span class="pill draft">nouveau</span>`}`;
+}
+function refreshColumn(rkey) {
+  const c = counts(null);
+  for (const row of instRows(currentInst)) {
+    const s = $("inst-grid").querySelector(`[data-cell="${row.key}|${rkey}"]`); if (!s) continue;
+    const v = row.plan[rkey] || ""; s.innerHTML = optionsHtml(rkey, v, c, true); s.value = v;
+  }
+}
+function renderInstChecks() {
+  if (!currentInst) return;
+  const rows = instRows(currentInst), inst = INST[currentInst];
+  const missing = rows.reduce((s, r) => s + (ROTS.length - filled(r.plan)), 0);
+  const dups = rows.filter(r => dupKeys(r.plan).size).length;
+  const done = rows.filter(r => isComplete(r.plan)).length;
+  const names = rows.map(r => r.nom.trim().toLowerCase()), sameName = names.filter((n, i) => n && names.indexOf(n) !== i).length;
+  const ok = (b, t) => `<span><span class="pill ${b ? "ok" : "todo"}">${b ? "✓" : "!"}</span>${t}</span>`;
+  $("inst-checks").innerHTML = [
+    ok(!inst.nb_attendu || rows.length === inst.nb_attendu, `${rows.length} participant${rows.length > 1 ? "s" : ""}${inst.nb_attendu ? ` sur ${inst.nb_attendu} annoncés` : ""}`),
+    ok(missing === 0, missing ? `${missing} case${missing > 1 ? "s" : ""} à remplir (en rouge)` : "aucune case oubliée"),
+    ok(dups === 0, dups ? `${dups} participant${dups > 1 ? "s font" : " fait"} deux fois la même activité (en orange)` : "pas d'activité en double"),
+    ok(sameName === 0, sameName ? `${sameName} nom${sameName > 1 ? "s" : ""} en double` : "pas de nom en double"),
+    `<span><b>${done}/${rows.length}</b>&nbsp;plannings complets</span>`,
+  ].join("");
+  const dirty = isDirty(currentInst);
+  $("inst-save").disabled = !dirty; $("inst-discard").hidden = !dirty;
+  $("inst-save").textContent = dirty ? "Enregistrer " + inst.nom : "Tout est enregistré";
+}
+function instMsg(t, kind) { const m = $("inst-msg"); m.textContent = t; m.className = "msg " + (kind || ""); }
+
+$("inst-grid").addEventListener("change", e => {
+  const s = e.target.closest("[data-cell]"); if (!s) return;
+  const [rowKey, rkey] = s.dataset.cell.split("|");
+  const row = ensureDraft(currentInst).rows.find(r => r.key === rowKey); if (!row) return;
+  if (s.value) row.plan[rkey] = s.value; else delete row.plan[rkey];
+  row.changed = true;
+  refreshColumn(rkey); paintRow(row); renderInstChecks(); renderInstCards(); renderStats();
+});
+$("inst-grid").addEventListener("input", e => {
+  const i = e.target.closest("[data-name]"); if (!i) return;
+  const row = ensureDraft(currentInst).rows.find(r => r.key === i.dataset.name); if (!row) return;
+  row.nom = i.value; row.changed = true;
+  renderInstChecks(); renderInstCards();
+});
+$("inst-grid").addEventListener("focusout", () => setTimeout(() => { if (instPending && !$("inst-grid").contains(document.activeElement)) renderInstPanel(); }, 0));
+$("inst-grid").addEventListener("click", async e => {
+  const b = e.target.closest("[data-remove]"); if (!b) return;
+  const rows = instRows(currentInst), row = rows.find(r => r.key === b.dataset.remove); if (!row) return;
+  if (!b.classList.contains("confirm")) { b.classList.add("confirm"); b.textContent = "Retirer ?"; return; }
+  if (!row.id) { const d = ensureDraft(currentInst); d.rows = d.rows.filter(r => r !== row); renderInstPanel(true); renderInstCards(); return; }
+  b.disabled = true;
+  try {
+    await rpc("apa_supprimer", { p_code: code, p_id: row.id });
+    if (drafts[currentInst]) drafts[currentInst].rows = drafts[currentInst].rows.filter(r => r.id !== row.id);
+    instMsg(row.nom + " a été retiré·e.", "ok");
+    await refresh(); renderInstPanel(true);
+  } catch (err) { b.disabled = false; instMsg(err.message, "err"); }
+});
+$("inst-add").addEventListener("click", () => {
+  const d = ensureDraft(currentInst);
+  let n = d.rows.length + 1;
+  while (d.rows.some(r => r.nom.toLowerCase() === ("participant " + n))) n++;
+  d.rows.push({ key: "new" + (++newKey), id: null, nom: "Participant " + n, plan: {}, changed: true });
+  renderInstPanel(true); renderInstCards();
+  const inputs = $("inst-grid").querySelectorAll("[data-name]"); const last = inputs[inputs.length - 1];
+  if (last) { last.focus(); last.select(); }
+});
+$("inst-discard").addEventListener("click", () => { delete drafts[currentInst]; instMsg("Modifications annulées."); renderAll(); renderInstPanel(true); });
+
+// Remplissage automatique : seulement les cases vides, en respectant les places
+// restantes et sans redonner une activité déjà faite par le participant.
+$("inst-auto").addEventListener("click", () => {
+  const d = ensureDraft(currentInst), c = counts(null);
+  let n = 0, repeats = 0, impossible = 0;
+  const reste = (rk, a) => a.cap - (c[rk + "|" + a.id] || 0);
+  ROTS.forEach((r, ti) => {
+    const order = d.rows.map((row, i) => d.rows[(i + ti) % d.rows.length]); // varie l'ordre à chaque tournante
+    for (const row of order) {
+      if (row.plan[r.key]) continue;
+      const done = Object.values(row.plan);
+      const libres = ACTIVITES.filter(a => reste(r.key, a) > 0);
+      // 1) une activité pas encore faite, là où il reste le plus de places ;
+      // 2) sinon (tout ce qui reste est complet) : l'activité la moins répétée, signalée en orange.
+      let cands = libres.filter(a => !done.includes(a.id)).sort((x, y) => reste(r.key, y) - reste(r.key, x));
+      if (!cands.length) {
+        cands = libres.sort((x, y) => done.filter(v => v === x.id).length - done.filter(v => v === y.id).length || reste(r.key, y) - reste(r.key, x));
+        if (cands.length) repeats++;
+      }
+      if (!cands.length) { impossible++; continue; }
+      const a = cands[0];
+      row.plan[r.key] = a.id; row.changed = true; c[r.key + "|" + a.id] = (c[r.key + "|" + a.id] || 0) + 1; n++;
+    }
+  });
+  renderInstPanel(true); renderInstCards(); renderStats();
+  let m = n ? `${n} case${n > 1 ? "s" : ""} remplie${n > 1 ? "s" : ""}. Vérifie, ajuste si besoin, puis clique « Enregistrer ».` : (impossible ? "" : "Aucune case vide à remplir.");
+  if (repeats) m += ` ${repeats} fois, il ne restait que des activités déjà faites : elles sont en orange, change-les si tu préfères une pause.`;
+  if (impossible) m += ` ${impossible} case${impossible > 1 ? "s" : ""} sans aucune place disponible.`;
+  instMsg(m.trim(), impossible ? "err" : "ok");
+});
+$("inst-save").addEventListener("click", async () => {
+  const d = drafts[currentInst]; if (!d) return;
+  if (d.rows.some(r => !r.nom.trim())) { instMsg("Un participant n'a pas de nom.", "err"); return; }
+  const lignes = d.rows.filter(r => r.changed || !r.id).map(r => ({ id: r.id, nom: r.nom.trim(), ...(r.id ? { maj: r.maj } : {}), plan: r.plan }));
+  if (!lignes.length) { delete drafts[currentInst]; renderAll(); return; }
+  $("inst-save").disabled = true; instMsg("Enregistrement…");
+  try {
+    // Le serveur revérifie toutes les places sous verrou : tout passe ou rien ne passe.
+    await rpc("apa_enregistrer_lot", { p_code: code, p_institution: currentInst, p_lignes: lignes });
+    delete drafts[currentInst];
+    instMsg(`${INST[currentInst].nom} : ${lignes.length} participant${lignes.length > 1 ? "s" : ""} enregistré${lignes.length > 1 ? "s" : ""}.`, "ok");
+  } catch (err) {
+    const hint = err.code === "P0001" ? " Une autre personne a pris ces places entre-temps : choisis une autre activité pour ces cases."
+      : (err.code === "P0002" || err.code === "P0003") ? " Clique « Annuler mes modifications » pour voir la version à jour, puis refais tes changements." : "";
+    instMsg(err.message + hint, "err");
+  } finally {
+    await refresh(); renderInstPanel(true);
+  }
+});
+window.addEventListener("beforeunload", e => { if (Object.keys(drafts).length) { e.preventDefault(); e.returnValue = ""; } });
+
+/* ================= INSCRIPTION INDIVIDUELLE ================= */
 function buildRotations() {
   const box = $("rotations"); box.textContent = "";
   for (const demi of [...new Set(ROTS.map(r => r.demi))]) {
@@ -312,39 +613,34 @@ function buildRotations() {
     box.appendChild(head);
     for (const r of rs) {
       const row = document.createElement("div"); row.className = "rot";
-      row.innerHTML = `<label class="t" for="sel-${r.key}"><b>Tournante ${r.n}</b>${plage(r)}</label><select id="sel-${r.key}"><option value="">— Pas d'activité (pause) —</option></select>`;
+      row.innerHTML = `<label class="t" for="sel-${r.key}"><b>Tournante ${r.n}</b>${plage(r)}</label><select id="sel-${r.key}"><option value="">— À choisir —</option></select>`;
       box.appendChild(row);
     }
   }
-  box.addEventListener("change", refreshSelects);
+  box.addEventListener("change", () => refreshSelects(true));
 }
-function refreshSelects() {
+let formPending = false;
+function refreshSelects(force) {
   if (!ROTS.length) return;
+  if (!force && $("form").contains(document.activeElement)) { formPending = true; return; }
+  formPending = false;
+  const instSel = $("institution"), iv = instSel.value;
+  instSel.innerHTML = `<option value="">— Aucune (inscription individuelle) —</option>` + INSTS.map(i => `<option value="${i.id}">${esc(i.nom)}</option>`).join("");
+  instSel.value = INST[iv] ? iv : "";
   const c = counts(editingId), chosen = {};
   for (const r of ROTS) chosen[r.key] = $("sel-" + r.key).value;
+  const d = dupKeys(chosen);
   for (const r of ROTS) {
     const sel = $("sel-" + r.key), cur = chosen[r.key];
-    sel.textContent = "";
-    sel.add(new Option("— Pas d'activité (pause) —", ""));
-    for (const lieu of [...new Set(ACTIVITES.map(a => a.lieu))]) {
-      const g = document.createElement("optgroup"); g.label = "Lieu " + lieu;
-      for (const a of ACTIVITES.filter(x => x.lieu === lieu)) {
-        const reste = a.cap - (c[r.key + "|" + a.id] || 0);
-        const o = new Option(reste > 0 ? `${a.nom} — ${reste} place${reste > 1 ? "s" : ""}` : `${a.nom} — complet`, a.id);
-        if (reste <= 0 && cur !== a.id) o.disabled = true;
-        g.appendChild(o);
-      }
-      sel.add(g);
-    }
-    sel.value = cur;
+    sel.innerHTML = optionsHtml(r.key, cur, c, false); sel.value = cur;
     const row = sel.closest(".rot");
-    const dup = cur && Object.entries(chosen).some(([k, v]) => k !== r.key && v === cur);
-    row.classList.toggle("dup", !!dup);
+    row.classList.toggle("dup", d.has(r.key));
     let hint = row.querySelector(".hint");
-    if (dup && !hint) { hint = document.createElement("div"); hint.className = "hint"; row.appendChild(hint); }
-    if (hint) { if (dup) hint.textContent = "Déjà choisie sur une autre tournante"; else hint.remove(); }
+    if (d.has(r.key) && !hint) { hint = document.createElement("div"); hint.className = "hint"; row.appendChild(hint); }
+    if (hint) { if (d.has(r.key)) hint.textContent = "Déjà choisie sur une autre tournante"; else hint.remove(); }
   }
 }
+$("form").addEventListener("focusout", () => setTimeout(() => { if (formPending && !$("form").contains(document.activeElement)) refreshSelects(true); }, 0));
 function resetForm() {
   editingId = null;
   $("form").reset();
@@ -352,14 +648,15 @@ function resetForm() {
   $("form-title").textContent = "Nouveau bénéficiaire";
   $("save").textContent = "Enregistrer l'inscription";
   $("cancel").hidden = true;
-  refreshSelects();
+  refreshSelects(true);
 }
 function loadForm(p) {
   editingId = p.id;
   $("nom").value = p.nom; $("groupe").value = p.groupe || "";
-  refreshSelects();
+  refreshSelects(true);
+  $("institution").value = p.institution || "";
   for (const r of ROTS) $("sel-" + r.key).value = (p.plan && p.plan[r.key]) || "";
-  refreshSelects();
+  refreshSelects(true);
   $("form-title").textContent = "Modifier : " + p.nom;
   $("save").textContent = "Enregistrer les changements";
   $("cancel").hidden = false;
@@ -376,19 +673,20 @@ $("form").addEventListener("submit", async e => {
   const plan = {};
   for (const r of ROTS) { const v = $("sel-" + r.key).value; if (v) plan[r.key] = v; }
   if (!Object.keys(plan).length) { setMsg("Choisis au moins une activité.", "err"); return; }
+  const inst = $("institution").value || null;
+  if (inst && isDirty(inst)) { setMsg(`${INST[inst].nom} a des modifications non enregistrées dans l'onglet « Par institution ». Enregistre-les d'abord.`, "err"); return; }
   if (!editingId) {
-    const same = people.find(p => p.nom.toLowerCase() === nom.toLowerCase());
+    const same = people.find(p => p.nom.toLowerCase() === nom.toLowerCase() && (p.institution || null) === inst);
     if (same && $("save").dataset.confirm !== "1") {
       $("save").dataset.confirm = "1";
-      setMsg(`${same.nom} est déjà inscrit·e. Clique encore pour créer une deuxième fiche, ou modifie la fiche existante.`, "err");
+      setMsg(`${label(same)} est déjà inscrit·e. Clique encore pour créer une deuxième fiche, ou modifie la fiche existante.`, "err");
       return;
     }
   }
   delete $("save").dataset.confirm;
   $("save").disabled = true; setMsg("Enregistrement…");
   try {
-    // Le serveur revérifie les places sous verrou : impossible de dépasser la capacité.
-    await rpc("apa_enregistrer", { p_code: code, p_id: editingId, p_nom: nom, p_groupe: $("groupe").value.trim(), p_plan: plan });
+    await rpc("apa_enregistrer", { p_code: code, p_id: editingId, p_nom: nom, p_groupe: $("groupe").value.trim(), p_plan: plan, p_institution: inst });
     const wasEdit = !!editingId;
     resetForm();
     setMsg((wasEdit ? "Modifications enregistrées pour " : "Inscription enregistrée pour ") + nom + ".", "ok");
@@ -401,9 +699,9 @@ $("form").addEventListener("submit", async e => {
 });
 $("cancel").addEventListener("click", () => { resetForm(); setMsg(""); });
 
-/* ---------- Planning ---------- */
+/* ================= PLANNING ================= */
 function renderGrid() {
-  const c = counts(null);
+  const c = savedCounts();
   const demis = [...new Set(ROTS.map(r => r.demi))];
   let h = `<thead><tr class="halves"><th class="act"></th>${demis.map(d => `<th class="sep" colspan="${ROTS.filter(r => r.demi === d).length}">${esc(d)}</th>`).join("")}</tr><tr><th class="act">Activité</th>`;
   for (const r of ROTS) h += `<th class="${r.sep ? "sep" : ""}" title="${plage(r)}">T${r.n}<br><small style="font-weight:400">${hm(r.debut)}</small></th>`;
@@ -445,32 +743,47 @@ function renderDetail() {
   }
 }
 
-/* ---------- Liste ---------- */
+/* ================= LISTE ================= */
 function renderPeople() {
-  const q = $("search").value.trim().toLowerCase();
-  const list = people.filter(p => !q || p.nom.toLowerCase().includes(q) || (p.groupe || "").toLowerCase().includes(q))
-    .sort((x, y) => x.nom.localeCompare(y.nom, "fr"));
+  const fi = $("filter-inst"), fv = fi.value;
+  fi.innerHTML = `<option value="">Toutes les institutions</option><option value="-">Sans institution</option>` + INSTS.map(i => `<option value="${i.id}">${esc(i.nom)}</option>`).join("");
+  fi.value = fv === "-" || INST[fv] ? fv : "";
+  const q = $("search").value.trim().toLowerCase(), f = fi.value;
+  const list = people.filter(p => (!q || p.nom.toLowerCase().includes(q) || (p.groupe || "").toLowerCase().includes(q))
+      && (!f || (f === "-" ? !p.institution : p.institution === f)))
+    .sort((x, y) => instName(x.institution).localeCompare(instName(y.institution), "fr") || byName(x, y));
   $("count").textContent = `${list.length} bénéficiaire${list.length > 1 ? "s" : ""}`;
   const box = $("people");
   if (!list.length) {
-    box.innerHTML = `<div class="empty-state">${!loaded ? "Chargement des inscriptions…" : people.length ? "Aucun résultat pour cette recherche." : "Aucune inscription pour l'instant. Commence par l'onglet « Inscrire »."}</div>`;
+    box.innerHTML = `<div class="empty-state">${!loaded ? "Chargement des inscriptions…" : people.length ? "Aucun résultat pour cette recherche." : "Aucune inscription pour l'instant."}</div>`;
     return;
   }
   box.innerHTML = list.map(p => {
+    const n = filled(p.plan);
     const plan = ROTS.filter(r => p.plan && p.plan[r.key]).map(r => `<span>T${r.n} ${hm(r.debut)} <em>${esc(ACT[p.plan[r.key]]?.nom || "?")}</em></span>`).join("");
-    return `<div class="person"><div class="who"><b>${esc(p.nom)}</b>${p.groupe ? `<span>${esc(p.groupe)}</span>` : ""}</div>
+    return `<div class="person"><div class="who"><b>${esc(p.nom)}</b><span>${esc([instName(p.institution), p.groupe].filter(Boolean).join(" · "))}</span> <span class="pill ${n === ROTS.length ? "ok" : "todo"}">${n}/${ROTS.length}</span></div>
       <div class="btns"><button class="btn small" data-edit="${p.id}">Modifier</button><button class="btn small danger" data-del="${p.id}">Supprimer</button></div>
       <div class="plan">${plan || "Aucune activité"}</div></div>`;
   }).join("");
 }
 $("search").addEventListener("input", renderPeople);
+$("filter-inst").addEventListener("change", renderPeople);
 $("people").addEventListener("click", async e => {
   const ed = e.target.closest("[data-edit]"), del = e.target.closest("[data-del]");
-  if (ed) { const p = people.find(x => x.id === ed.dataset.edit); if (p) loadForm(p); }
+  if (ed) {
+    const p = people.find(x => x.id === ed.dataset.edit); if (!p) return;
+    if (p.institution && INST[p.institution]) { currentInst = p.institution; show("institution"); renderInstCards(); renderInstPanel(true); }
+    else loadForm(p);
+  }
   if (del) {
     if (del.dataset.confirm !== "1") { del.dataset.confirm = "1"; del.textContent = "Confirmer ?"; return; }
     del.disabled = true;
-    try { await rpc("apa_supprimer", { p_code: code, p_id: del.dataset.del }); if (editingId === del.dataset.del) resetForm(); await refresh(); }
+    try {
+      await rpc("apa_supprimer", { p_code: code, p_id: del.dataset.del });
+      for (const d of Object.values(drafts)) d.rows = d.rows.filter(r => r.id !== del.dataset.del);
+      if (editingId === del.dataset.del) resetForm();
+      await refresh();
+    }
     catch { del.disabled = false; del.textContent = "Échec, réessayer"; delete del.dataset.confirm; }
   }
 });
@@ -483,33 +796,34 @@ function downloadCsv(name, rows) {
   a.download = name; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
+const sortedPeople = () => [...people].sort((x, y) => instName(x.institution).localeCompare(instName(y.institution), "fr") || byName(x, y));
 $("csv-benef").addEventListener("click", () => {
-  const rows = [["Nom", "Groupe", ...ROTS.map(r => `T${r.n} (${hm(r.debut)})`)]];
-  for (const p of [...people].sort((x, y) => x.nom.localeCompare(y.nom, "fr")))
-    rows.push([p.nom, p.groupe, ...ROTS.map(r => ACT[p.plan?.[r.key]]?.nom || "")]);
+  const rows = [["Institution", "Nom", "Remarque", ...ROTS.map(r => `T${r.n} (${hm(r.debut)})`)]];
+  for (const p of sortedPeople()) rows.push([instName(p.institution), p.nom, p.groupe, ...ROTS.map(r => ACT[p.plan?.[r.key]]?.nom || "")]);
   downloadCsv("apa-inscriptions-par-beneficiaire.csv", rows);
 });
 $("csv-act").addEventListener("click", () => {
-  const rows = [["Activité", "Lieu", "Tournante", "Horaire", "Nom", "Groupe"]];
+  const rows = [["Activité", "Lieu", "Tournante", "Horaire", "Nom", "Institution"]];
   for (const a of ACTIVITES) for (const r of ROTS)
-    for (const p of people.filter(p => p.plan?.[r.key] === a.id).sort((x, y) => x.nom.localeCompare(y.nom, "fr")))
-      rows.push([a.nom, a.lieu, "T" + r.n, plage(r), p.nom, p.groupe]);
+    for (const p of sortedPeople().filter(p => p.plan?.[r.key] === a.id))
+      rows.push([a.nom, a.lieu, "T" + r.n, plage(r), p.nom, instName(p.institution)]);
   downloadCsv("apa-inscriptions-par-activite.csv", rows);
 });
 
 /* ---------- Général ---------- */
-function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function renderStats() {
   if (!ROTS.length) { $("stats").textContent = ""; return; }
-  const used = Object.values(counts(null)).reduce((s, n) => s + n, 0);
-  $("stats").innerHTML = `<div><b>${people.length}</b> <span>bénéficiaires inscrits</span></div>
-    <div><b>${used}</b> <span>/ ${totalPlaces()} places réservées</span></div>
-    <div><b>${ACTIVITES.length}</b> <span>activités · ${ROTS.length} tournantes</span></div>`;
+  const used = Object.values(savedCounts()).reduce((s, n) => s + n, 0);
+  const done = people.filter(p => isComplete(p.plan)).length;
+  $("stats").innerHTML = `<div><b>${people.length}</b> <span>bénéficiaires</span></div>
+    <div><b>${done}</b> <span>plannings complets</span></div>
+    <div><b>${used}</b> <span>/ ${totalPlaces()} places réservées</span></div>`;
 }
-function renderAll() { renderStats(); refreshSelects(); renderGrid(); renderDetail(); renderPeople(); }
+function renderAll() { renderStats(); renderInstCards(); renderInstPanel(); refreshSelects(); renderGrid(); renderDetail(); renderPeople(); }
 function show(view) {
   for (const b of document.querySelectorAll("nav.tabs button")) b.setAttribute("aria-selected", b.dataset.view === view);
-  for (const v of ["inscrire", "planning", "inscrits"]) $("view-" + v).hidden = v !== view;
+  for (const v of ["institution", "inscrire", "planning", "inscrits"]) $("view-" + v).hidden = v !== view;
   try { localStorage.setItem("apa-tab", view); } catch {}
 }
 document.querySelector("nav.tabs").addEventListener("click", e => { const b = e.target.closest("button"); if (b) show(b.dataset.view); });

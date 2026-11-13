@@ -32,6 +32,17 @@ create table if not exists public.beneficiaires (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.institutions (
+  id          uuid primary key default gen_random_uuid(),
+  nom         text not null unique check (length(trim(nom)) between 1 and 120),
+  nb_attendu  int  not null default 0 check (nb_attendu >= 0),
+  ordre       int  not null default 0
+);
+
+alter table public.beneficiaires
+  add column if not exists institution_id uuid references public.institutions(id) on delete set null;
+create index if not exists beneficiaires_institution on public.beneficiaires (institution_id);
+
 create table if not exists public.inscriptions (
   beneficiaire_id uuid not null references public.beneficiaires(id) on delete cascade,
   tournante       int  not null references public.tournantes(id),
@@ -54,6 +65,7 @@ create table if not exists public.config (
 alter table public.activites     enable row level security;
 alter table public.tournantes    enable row level security;
 alter table public.beneficiaires enable row level security;
+alter table public.institutions  enable row level security;
 alter table public.inscriptions  enable row level security;
 alter table public.config        enable row level security;
 
@@ -82,7 +94,10 @@ insert into public.activites (id, nom, lieu, cap, ordre) values
   ('bowling',    'Bowling',                  'P3',  6, 14),
   ('psychomot',  'Parcours psychomotricité', 'P3',  6, 15),
   ('football',   'Initiation football',      'P3', 10, 16),
-  ('flechettes', 'Fléchettes ventouses',     'P3',  5, 17)
+  ('flechettes', 'Fléchettes ventouses',     'P3',  5, 17),
+  -- « Pause » : permet de marquer volontairement une tournante sans activité
+  -- (différent d'une case oubliée). Pas de limite de places, absente du planning.
+  ('pause',      'Pause / repos',            '—', 999, 99)
 on conflict (id) do update
   set nom = excluded.nom, lieu = excluded.lieu, cap = excluded.cap, ordre = excluded.ordre;
 
@@ -141,45 +156,63 @@ begin
   return jsonb_build_object(
     'activites', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'nom', nom, 'lieu', lieu, 'cap', cap) order by ordre), '[]') from public.activites),
     'tournantes', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'debut', to_char(debut, 'HH24:MI'), 'fin', to_char(fin, 'HH24:MI'), 'demi', demi) order by id), '[]') from public.tournantes),
+    'institutions', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'nom', nom, 'nb_attendu', nb_attendu) order by ordre, nom), '[]') from public.institutions),
     'beneficiaires', (
       select coalesce(jsonb_agg(jsonb_build_object(
-        'id', b.id, 'nom', b.nom, 'groupe', b.groupe, 'maj', b.updated_at,
+        'id', b.id, 'nom', b.nom, 'groupe', b.groupe, 'maj', b.updated_at, 'institution', b.institution_id,
         'plan', coalesce((select jsonb_object_agg(i.tournante::text, i.activite) from public.inscriptions i where i.beneficiaire_id = b.id), '{}'::jsonb)
       ) order by b.nom), '[]')
       from public.beneficiaires b)
   );
 end $$;
 
--- Crée ou modifie un bénéficiaire et son planning, en une seule transaction.
+-- Contrôle commun : aucune tournante/activité ne dépasse sa capacité.
+-- Appelé APRÈS les écritures, pendant que les activités sont verrouillées.
+create or replace function public._apa_check_capacite()
+returns void language plpgsql security definer set search_path = public, extensions as $$
+declare v_pleins text;
+begin
+  select string_agg(format('%s (T%s)', a.nom, i.tournante), ', ' order by i.tournante, a.nom)
+    into v_pleins
+    from (select tournante, activite, count(*) n from public.inscriptions group by tournante, activite) i
+    join public.activites a on a.id = i.activite
+   where i.n > a.cap;
+  if v_pleins is not null then
+    raise exception 'Plus de place pour : %', v_pleins using errcode = 'P0001';  -- annule tout
+  end if;
+end $$;
+
+-- Ancienne version (sans institution) remplacée par celle ci-dessous.
+drop function if exists public.apa_enregistrer(text, uuid, text, text, jsonb);
+
+-- Crée ou modifie UN bénéficiaire et son planning, en une seule transaction.
 -- p_plan : {"1": "zumba", "4": "kinball", ...}  (tournante -> activité)
 -- La capacité est vérifiée SOUS VERROU : deux inscriptions simultanées sur
 -- la dernière place ne peuvent pas passer toutes les deux.
-create or replace function public.apa_enregistrer(p_code text, p_id uuid, p_nom text, p_groupe text, p_plan jsonb)
+create or replace function public.apa_enregistrer(p_code text, p_id uuid, p_nom text, p_groupe text, p_plan jsonb, p_institution uuid default null)
 returns uuid language plpgsql security definer set search_path = public, extensions as $$
 declare
-  v_id     uuid := p_id;
-  v_pleins text;
+  v_id uuid := p_id;
 begin
   perform public._apa_check_code(p_code);
 
   if p_nom is null or length(trim(p_nom)) = 0 then
     raise exception 'Le nom est obligatoire.' using errcode = '22023';
   end if;
-  if p_plan is null or jsonb_typeof(p_plan) <> 'object' or p_plan = '{}'::jsonb then
+  if p_plan is null or jsonb_typeof(p_plan) <> 'object' or (p_id is null and p_plan = '{}'::jsonb) then
     raise exception 'Choisis au moins une activité.' using errcode = '22023';
   end if;
 
-  -- Verrouille les activités concernées (toujours dans le même ordre, pas d'interblocage).
-  perform 1 from public.activites
-   where id in (select value from jsonb_each_text(p_plan))
-   order by id
-   for update;
+  -- Verrou global sur les activités (toujours dans le même ordre : pas d'interblocage).
+  perform 1 from public.activites order by id for update;
 
   if v_id is null then
-    insert into public.beneficiaires (nom, groupe) values (trim(p_nom), coalesce(trim(p_groupe), ''))
+    insert into public.beneficiaires (nom, groupe, institution_id)
+    values (trim(p_nom), coalesce(trim(p_groupe), ''), p_institution)
     returning id into v_id;
   else
-    update public.beneficiaires set nom = trim(p_nom), groupe = coalesce(trim(p_groupe), ''), updated_at = now()
+    update public.beneficiaires
+       set nom = trim(p_nom), groupe = coalesce(trim(p_groupe), ''), institution_id = p_institution, updated_at = now()
      where id = v_id;
     if not found then
       raise exception 'Cette fiche a été supprimée entre-temps.' using errcode = 'P0002';
@@ -190,20 +223,65 @@ begin
   insert into public.inscriptions (beneficiaire_id, tournante, activite)
   select v_id, key::int, value from jsonb_each_text(p_plan);
 
-  -- Contrôle de capacité après insertion, toujours sous verrou.
-  select string_agg(format('%s (T%s)', a.nom, i.tournante), ', ' order by i.tournante)
-    into v_pleins
-    from (select tournante, activite, count(*) n from public.inscriptions
-           where (tournante, activite) in (select key::int, value from jsonb_each_text(p_plan))
-           group by tournante, activite) i
-    join public.activites a on a.id = i.activite
-   where i.n > a.cap;
+  perform public._apa_check_capacite();
+  return v_id;
+end $$;
 
-  if v_pleins is not null then
-    raise exception 'Plus de place pour : %', v_pleins using errcode = 'P0001';  -- annule tout
+-- Enregistre TOUTE une institution d'un coup (onglet « Par institution »).
+-- p_lignes : [{"id": uuid|null, "nom": "...", "maj": "<date lue>", "plan": {"1": "zumba", ...}}, ...]
+-- Tout passe ou rien ne passe. Si une fiche a été modifiée par quelqu'un d'autre
+-- depuis son chargement ("maj" différent), l'enregistrement est refusé.
+create or replace function public.apa_enregistrer_lot(p_code text, p_institution uuid, p_lignes jsonb)
+returns int language plpgsql security definer set search_path = public, extensions as $$
+declare
+  l     jsonb;
+  v_id  uuid;
+  v_maj timestamptz;
+  v_nom text;
+  n     int := 0;
+begin
+  perform public._apa_check_code(p_code);
+
+  if not exists (select 1 from public.institutions where id = p_institution) then
+    raise exception 'Institution inconnue.' using errcode = '22023';
+  end if;
+  if p_lignes is null or jsonb_typeof(p_lignes) <> 'array' or jsonb_array_length(p_lignes) > 300 then
+    raise exception 'Liste de participants invalide.' using errcode = '22023';
   end if;
 
-  return v_id;
+  perform 1 from public.activites order by id for update;
+
+  for l in select * from jsonb_array_elements(p_lignes) loop
+    v_nom := trim(coalesce(l->>'nom', ''));
+    if v_nom = '' then
+      raise exception 'Un participant n''a pas de nom.' using errcode = '22023';
+    end if;
+    v_id := nullif(l->>'id', '')::uuid;
+
+    if v_id is null then
+      insert into public.beneficiaires (nom, institution_id) values (v_nom, p_institution)
+      returning id into v_id;
+    else
+      select updated_at into v_maj from public.beneficiaires where id = v_id for update;
+      if not found then
+        raise exception '% a été supprimé·e entre-temps.', v_nom using errcode = 'P0002';
+      end if;
+      if l ? 'maj' and (l->>'maj')::timestamptz <> v_maj then
+        raise exception 'La fiche de % a été modifiée par quelqu''un d''autre entre-temps.', v_nom using errcode = 'P0003';
+      end if;
+      update public.beneficiaires
+         set nom = v_nom, institution_id = p_institution, updated_at = now()
+       where id = v_id;
+      delete from public.inscriptions where beneficiaire_id = v_id;
+    end if;
+
+    insert into public.inscriptions (beneficiaire_id, tournante, activite)
+    select v_id, key::int, value from jsonb_each_text(coalesce(l->'plan', '{}'::jsonb));
+    n := n + 1;
+  end loop;
+
+  perform public._apa_check_capacite();
+  return n;
 end $$;
 
 create or replace function public.apa_supprimer(p_code text, p_id uuid)
@@ -214,19 +292,22 @@ begin
 end $$;
 
 -- ---------- Droits d'appel --------------------------------------------
-revoke all on function public._apa_check_code(text)   from public, anon, authenticated;
-revoke all on function public.apa_definir_code(text)  from public, anon, authenticated;
-grant execute on function public.apa_connexion(text)                          to anon, authenticated;
-grant execute on function public.apa_etat(text)                               to anon, authenticated;
-grant execute on function public.apa_enregistrer(text, uuid, text, text, jsonb) to anon, authenticated;
-grant execute on function public.apa_supprimer(text, uuid)                    to anon, authenticated;
+revoke all on function public._apa_check_code(text)      from public, anon, authenticated;
+revoke all on function public._apa_check_capacite()      from public, anon, authenticated;
+revoke all on function public.apa_definir_code(text)     from public, anon, authenticated;
+grant execute on function public.apa_connexion(text)                                  to anon, authenticated;
+grant execute on function public.apa_etat(text)                                       to anon, authenticated;
+grant execute on function public.apa_enregistrer(text, uuid, text, text, jsonb, uuid) to anon, authenticated;
+grant execute on function public.apa_enregistrer_lot(text, uuid, jsonb)               to anon, authenticated;
+grant execute on function public.apa_supprimer(text, uuid)                            to anon, authenticated;
 
 -- ---------- Code d'équipe initial -------------------------------------
--- Défini seulement au premier lancement. Pour le changer ensuite :
---   select public.apa_definir_code('nouveau-code');
--- ⚠ Remplace 'change-moi' par le code à donner aux collègues avant le premier lancement.
+-- Défini seulement au tout premier lancement (si aucun code n'existe encore).
+-- ⚠ Ne mets JAMAIS le vrai code dans ce fichier : le dépôt est public.
+-- Pour définir ou changer le code, lance dans le SQL Editor de Supabase :
+--   select public.apa_definir_code('ton-code');
 do $$ begin
   if not exists (select 1 from public.config) then
-    perform public.apa_definir_code('APATABORA');
+    perform public.apa_definir_code('change-moi');
   end if;
 end $$;
