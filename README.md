@@ -13,9 +13,11 @@ Inscriptions des bénéficiaires aux activités de la **Journée APA du 17 novem
 
 1. Sur https://supabase.com, clique sur **New project** (le plan gratuit suffit, région EU).
 2. Dans Supabase : **SQL Editor** → **New query** → colle `supabase/schema.sql` → **Run**.
-3. Définis le **code d'équipe** (toujours dans le SQL Editor, jamais dans un fichier du dépôt) :
+3. Définis le **code d'équipe** (pour les éducateurs) et le **code organisateur** (pour toi
+   seul, sert à déverrouiller), toujours dans le SQL Editor, jamais dans un fichier du dépôt :
    ```sql
-   select public.apa_definir_code('ton-code');
+   select public.apa_definir_code('code-equipe');
+   select public.apa_definir_code_admin('code-organisateur');
    ```
 4. Charge les institutions et leurs participants avec le fichier
    `institutions-participants.sql`. Ce fichier n'est **pas** dans le dépôt, car il contient
@@ -43,7 +45,10 @@ s'affichent en tableau (une ligne par participant, une colonne par tournante).
 - Il choisit une activité ou **Pause / repos** dans chaque case. Les places restantes
   s'affichent dans chaque menu, et une activité complète ne peut pas être choisie.
 - **Remplir automatiquement les cases vides** propose un planning complet qui respecte
-  les places et évite de refaire la même activité. Il reste à vérifier, puis enregistrer.
+  les places et évite de refaire la même activité. Chaque nouveau clic (**Proposer une
+  autre variante**) tire une autre répartition. Les cases proposées ont une bordure bleue,
+  et les cases choisies à la main ne bougent pas. **Tout vider** repart de zéro (rien n'est
+  effacé tant qu'on n'a pas enregistré).
 - **Contrôles anti-oubli** : les cases vides sont en rouge, les activités faites deux fois
   sont en orange, et le nombre de participants est comparé au nombre annoncé.
 - Les noms sont modifiables (ex. remplacer « Participant 3 » par le vrai nom), et on
@@ -51,6 +56,14 @@ s'affichent en tableau (une ligne par participant, une colonne par tournante).
 - **Enregistrer** envoie toute l'institution d'un coup. Si une place a été prise
   entre-temps, ou si un collègue a modifié la même fiche, rien n'est enregistré et la page
   explique quoi corriger.
+
+**Téléchargement et verrouillage** : **Télécharger et verrouiller (PDF)** demande une
+confirmation, puis verrouille le planning de l'institution et télécharge le PDF (vue
+d'ensemble, « où sont les participants », une fiche par participant). Une fois verrouillé,
+plus personne ne peut modifier, ajouter ou supprimer un participant de cette institution :
+c'est contrôlé par la base, pas seulement par la page. Le PDF reste téléchargeable.
+Seul l'organisateur peut déverrouiller : bouton **Déverrouiller (organisateur)** et code
+organisateur.
 
 Onglet **Inscription individuelle** : pour une personne seule ou un ajout de dernière
 minute.
