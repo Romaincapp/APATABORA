@@ -207,6 +207,7 @@ table.inst-grid .sep { border-left: 2px solid var(--line); }
             <div class="actions">
               <button class="btn small" type="button" id="inst-add">+ Ajouter un participant</button>
               <button class="btn small" type="button" id="inst-auto">Remplir automatiquement les cases vides</button>
+              <button class="btn small" type="button" id="inst-pdf">Télécharger le planning (PDF)</button>
             </div>
           </div>
           <div class="checks" id="inst-checks"></div>
@@ -602,6 +603,123 @@ $("inst-save").addEventListener("click", async () => {
   }
 });
 window.addEventListener("beforeunload", e => { if (Object.keys(drafts).length) { e.preventDefault(); e.returnValue = ""; } });
+
+/* ---------- Planning PDF de l'institution ---------- */
+function loadScript(src) {
+  return new Promise((ok, ko) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => ko(new Error(src)); document.head.appendChild(s); });
+}
+async function loadPdfLib() {
+  if (!window.jspdf?.jsPDF) await loadScript("vendor/jspdf.umd.min.js");
+  if (!window.jspdf.jsPDF.API.autoTable) await loadScript("vendor/jspdf.plugin.autotable.min.js");
+  return window.jspdf.jsPDF;
+}
+const LIEU_RGB = { P1: [253, 233, 224], P2: [220, 243, 232], P3: [238, 227, 251] };
+const INK = [24, 32, 58], MUTED = [91, 100, 128], RED = [192, 57, 43], REDSOFT = [251, 226, 223];
+const slug = s => s.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase();
+
+$("inst-pdf").addEventListener("click", async () => {
+  const id = currentInst, inst = INST[id]; if (!inst) return;
+  if (isDirty(id)) { instMsg("Enregistre d'abord tes modifications : le PDF reprend le planning enregistré.", "err"); return; }
+  const rows = people.filter(p => p.institution === id).sort(byName);
+  if (!rows.length) { instMsg("Aucun participant à mettre dans le planning.", "err"); return; }
+  const btn = $("inst-pdf"); btn.disabled = true; instMsg("Préparation du PDF…");
+  try {
+    const jsPDF = await loadPdfLib();
+    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+    const genere = new Date().toLocaleString("fr-BE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+    const missing = rows.reduce((s, p) => s + (ROTS.length - filled(p.plan)), 0);
+    const cellTxt = a => !a ? "—" : a === PAUSE ? "Pause" : `${ACT[a]?.nom || "?"}\n${ACT[a]?.lieu || ""}`;
+    const fillFor = a => !a ? REDSOFT : a === PAUSE ? [240, 241, 245] : LIEU_RGB[ACT[a]?.lieu] || [255, 255, 255];
+    const header = (title, sub) => {
+      doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(...MUTED);
+      doc.text("JOURNÉE APA · MARDI 17 NOVEMBRE", 10, 10);
+      doc.setFontSize(16); doc.setTextColor(...INK); doc.text(title, 10, 18);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(...MUTED); doc.text(sub, 10, 24);
+    };
+
+    // 1) Vue d'ensemble : participants × tournantes
+    header(`Planning · ${inst.nom}`, `${rows.length} participant${rows.length > 1 ? "s" : ""} · 15 min d'activité, 5 min de changement · généré le ${genere}`);
+    let y0 = 28;
+    if (missing) { doc.setTextColor(...RED); doc.setFont("helvetica", "bold"); doc.text(`Attention : ${missing} case${missing > 1 ? "s" : ""} pas encore remplie${missing > 1 ? "s" : ""} (en rouge).`, 10, 29); y0 = 32; }
+    const demis = [...new Set(ROTS.map(r => r.demi))];
+    doc.autoTable({
+      startY: y0, margin: { left: 8, right: 8 }, theme: "grid",
+      head: [
+        [{ content: "", styles: { fillColor: [255, 255, 255] } }, ...demis.map(d => ({ content: d, colSpan: ROTS.filter(r => r.demi === d).length, styles: { halign: "center" } }))],
+        ["Participant", ...ROTS.map(r => `T${r.n}\n${hm(r.debut)}`)],
+      ],
+      body: rows.map(p => [p.nom, ...ROTS.map(r => cellTxt(p.plan?.[r.key]))]),
+      styles: { fontSize: 6.3, cellPadding: 0.9, valign: "middle", halign: "center", textColor: INK, lineColor: [221, 225, 236], lineWidth: 0.2, overflow: "linebreak" },
+      headStyles: { fillColor: [35, 67, 201], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 7 },
+      columnStyles: { 0: { halign: "left", fontStyle: "bold", cellWidth: 30, fontSize: 7 } },
+      didParseCell: d => { if (d.section === "body" && d.column.index > 0) d.cell.styles.fillColor = fillFor(rows[d.row.index].plan?.[ROTS[d.column.index - 1].key]); },
+    });
+    const ly = doc.lastAutoTable.finalY + 5;
+    doc.setFontSize(7.5); doc.setFont("helvetica", "normal"); doc.setTextColor(...MUTED);
+    [["P1", LIEU_RGB.P1], ["P2", LIEU_RGB.P2], ["P3", LIEU_RGB.P3], ["Pause", [240, 241, 245]]].forEach(([t, c], i) => {
+      doc.setFillColor(...c); doc.rect(10 + i * 26, ly - 3, 4, 4, "F"); doc.text(t === "Pause" ? "Pause" : "Lieu " + t, 16 + i * 26, ly);
+    });
+    doc.text("Dîner pour tous à 12h05 · reprise à 12h50", 120, ly);
+
+    // 2) Où sont mes participants ? (pour les accompagnants)
+    doc.addPage("a4", "landscape");
+    header(`Où sont les participants de ${inst.nom} ?`, "Pour les accompagnants : à chaque tournante, qui est dans quel lieu.");
+    const lieux = [...new Set(ACTIVITES.map(a => a.lieu))];
+    const where = (r, lieu) => ACTIVITES.filter(a => a.lieu === lieu).map(a => {
+      const ns = rows.filter(p => p.plan?.[r.key] === a.id).map(p => p.nom);
+      return ns.length ? `${a.nom} : ${ns.join(", ")}` : null;
+    }).filter(Boolean).join("\n");
+    doc.autoTable({
+      startY: 28, margin: { left: 8, right: 8 }, theme: "grid",
+      head: [["Tournante", ...lieux.map(l => "Lieu " + l), "Pause / non rempli"]],
+      body: ROTS.map(r => [`T${r.n}\n${plage(r)}`, ...lieux.map(l => where(r, l)),
+        [rows.filter(p => p.plan?.[r.key] === PAUSE).map(p => p.nom).join(", "), rows.filter(p => !p.plan?.[r.key]).map(p => p.nom + " (?)").join(", ")].filter(Boolean).join("\n")]),
+      styles: { fontSize: 7, cellPadding: 1.2, valign: "top", textColor: INK, lineColor: [221, 225, 236], lineWidth: 0.2 },
+      headStyles: { fillColor: [35, 67, 201], textColor: [255, 255, 255] },
+      columnStyles: { 0: { cellWidth: 24, fontStyle: "bold" } },
+      didParseCell: d => { if (d.section === "head" && d.column.index > 0 && d.column.index <= lieux.length) { d.cell.styles.fillColor = LIEU_RGB[lieux[d.column.index - 1]] || [35, 67, 201]; d.cell.styles.textColor = INK; } },
+    });
+
+    // 3) Une fiche par participant (4 par page, à découper)
+    const W = 210, H = 297, cw = 91, ch = 134, gx = (W - 2 * cw) / 3, gy = (H - 2 * ch) / 3;
+    rows.forEach((p, i) => {
+      if (i % 4 === 0) doc.addPage("a4", "portrait");
+      const x = gx + (i % 2) * (cw + gx), y = gy + (Math.floor(i / 2) % 2) * (ch + gy);
+      doc.setDrawColor(190, 196, 214); doc.setLineDashPattern([1.5, 1.5], 0); doc.rect(x, y, cw, ch); doc.setLineDashPattern([], 0);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(...MUTED); doc.text("JOURNÉE APA · 17 NOVEMBRE", x + 4, y + 6);
+      doc.setFontSize(12); doc.setTextColor(...INK); doc.text(doc.splitTextToSize(p.nom, cw - 8)[0], x + 4, y + 12);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(...MUTED); doc.text(inst.nom, x + 4, y + 16.5);
+      const body = [];
+      ROTS.forEach((r, k) => {
+        if (k > 0 && r.demi !== ROTS[k - 1].demi) body.push([{ content: "Dîner pour tous · 12h05", colSpan: 4, styles: { halign: "center", fontStyle: "italic", textColor: MUTED, fillColor: [255, 255, 255] } }]);
+        const a = p.plan?.[r.key];
+        body.push([`T${r.n}`, plage(r), !a ? "À compléter" : a === PAUSE ? "Pause / repos" : ACT[a]?.nom || "?", a && a !== PAUSE ? ACT[a]?.lieu || "" : ""]);
+      });
+      doc.autoTable({
+        startY: y + 19, margin: { left: x + 3 }, tableWidth: cw - 6, theme: "plain", pageBreak: "avoid",
+        body, styles: { fontSize: 7.5, cellPadding: { top: 0.9, bottom: 0.9, left: 1, right: 1 }, textColor: INK },
+        columnStyles: { 0: { cellWidth: 8, fontStyle: "bold" }, 1: { cellWidth: 21, textColor: MUTED }, 3: { cellWidth: 9, halign: "center", fontStyle: "bold" } },
+        didParseCell: d => {
+          if (d.cell.colSpan > 1) return;
+          const a = p.plan?.[d.row.raw?.[0]?.slice?.(1) || ""];
+          if (d.column.index >= 2) d.cell.styles.fillColor = fillFor(a);
+          if (!a && d.column.index === 2) d.cell.styles.textColor = RED;
+        },
+      });
+    });
+
+    const n = doc.getNumberOfPages();
+    for (let i = 1; i <= n; i++) {
+      doc.setPage(i); doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(...MUTED);
+      const pw = doc.internal.pageSize.getWidth(), ph = doc.internal.pageSize.getHeight();
+      doc.text(`${inst.nom} · page ${i}/${n}`, pw - 8, ph - 4, { align: "right" });
+    }
+    doc.save(`planning-apa-${slug(inst.nom)}.pdf`);
+    instMsg(`PDF téléchargé : planning-apa-${slug(inst.nom)}.pdf`, "ok");
+  } catch (err) {
+    instMsg("Le PDF n'a pas pu être créé. Recharge la page et réessaie.", "err");
+  } finally { btn.disabled = false; }
+});
 
 /* ================= INSCRIPTION INDIVIDUELLE ================= */
 function buildRotations() {
