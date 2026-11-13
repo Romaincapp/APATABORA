@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Inscriptions Journée APA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&display=swap">
+<style>
+/* Layout : bandeau d'en-tête, onglets, puis une colonne de travail. Couleurs par lieu (P1/P2/P3) reprises partout. */
+:root {
+  --bg: #f6f7fb; --surface: #ffffff; --fg: #18203a; --muted: #5b6480; --line: #dde1ec;
+  --accent: #2343c9; --accent-ink: #ffffff; --accent-soft: #e5eaff;
+  --p1: #d9572b; --p1-soft: #fde9e0; --p2: #1d8a5b; --p2-soft: #dcf3e8; --p3: #7a3fc4; --p3-soft: #eee3fb;
+  --ok: #1d8a5b; --warn: #b7791f; --warn-soft: #fdf3dc; --full: #c0392b; --full-soft: #fbe2df;
+  --f-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #10142a; --surface: #181d36; --fg: #e8ebf7; --muted: #9aa2c0; --line: #2b3256;
+  --accent: #8ea2ff; --accent-ink: #10142a; --accent-soft: #232c5c;
+  --p1: #ff9a74; --p1-soft: #3a2420; --p2: #5fd3a0; --p2-soft: #173329; --p3: #c39bff; --p3-soft: #2c2145;
+  --ok: #5fd3a0; --warn: #f2c063; --warn-soft: #3a3020; --full: #ff8a7d; --full-soft: #3d2022;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #10142a; --surface: #181d36; --fg: #e8ebf7; --muted: #9aa2c0; --line: #2b3256;
+  --accent: #8ea2ff; --accent-ink: #10142a; --accent-soft: #232c5c;
+  --p1: #ff9a74; --p1-soft: #3a2420; --p2: #5fd3a0; --p2-soft: #173329; --p3: #c39bff; --p3-soft: #2c2145;
+  --ok: #5fd3a0; --warn: #f2c063; --warn-soft: #3a3020; --full: #ff8a7d; --full-soft: #3d2022;
+  color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1100px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header { padding-block: 28px 8px; }
+.eyebrow { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+h1 { font-family: var(--f-display); font-weight: 800; font-size: clamp(26px, 5vw, 38px); line-height: 1.1; margin: 4px 0 6px; text-wrap: balance; }
+h2 { font-family: var(--f-display); font-weight: 600; font-size: 20px; margin: 0; text-wrap: balance; }
+.sub { color: var(--muted); margin: 0; max-width: 65ch; }
+.stats { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 14px; font-variant-numeric: tabular-nums; }
+.stats b { font-family: var(--f-display); font-size: 20px; }
+.stats span { color: var(--muted); font-size: 13px; }
+
+nav.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-top: 18px; overflow-x: auto; }
+nav.tabs button { background: none; border: 0; border-bottom: 3px solid transparent; padding: 10px 14px; font: 700 15px var(--f-body); color: var(--muted); cursor: pointer; white-space: nowrap; }
+nav.tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+button:focus-visible, input:focus-visible, select:focus-visible, .cell:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+main { padding-block: 20px 60px; }
+.notice { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--fg); margin-bottom: 16px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+.stack { display: flex; flex-direction: column; gap: 16px; }
+
+.fields { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; }
+@media (max-width: 560px) { .fields { grid-template-columns: 1fr; } }
+label.f { display: flex; flex-direction: column; gap: 4px; font-weight: 700; font-size: 14px; min-width: 0; }
+input[type=text], select { font: 400 15px var(--f-body); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; width: 100%; min-width: 0; }
+
+.half-title { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 6px 0 4px; }
+.half-title h3 { font-family: var(--f-display); font-weight: 600; font-size: 16px; margin: 0; }
+.half-title small { color: var(--muted); }
+.rot { display: grid; grid-template-columns: 110px 1fr; gap: 10px; align-items: center; padding: 6px 0; border-top: 1px dashed var(--line); }
+.rot:first-of-type { border-top: 0; }
+.rot .t { font-variant-numeric: tabular-nums; font-size: 14px; }
+.rot .t b { display: block; font-size: 13px; color: var(--muted); font-weight: 700; }
+.rot.dup select { border-color: var(--warn); background: var(--warn-soft); }
+.rot .hint { grid-column: 2; font-size: 12px; color: var(--warn); margin-top: -4px; }
+@media (max-width: 480px) { .rot { grid-template-columns: 1fr; gap: 4px; } .rot .t b { display: inline; margin-right: 6px; } .rot .hint { grid-column: 1; } }
+
+.actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.btn { font: 700 15px var(--f-body); border-radius: 8px; padding: 10px 16px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.small { padding: 5px 10px; font-size: 13px; }
+.btn.danger { color: var(--full); border-color: var(--full); }
+.btn[disabled] { opacity: .5; cursor: not-allowed; }
+.msg { font-size: 14px; }
+.msg.ok { color: var(--ok); } .msg.err { color: var(--full); }
+
+.lieu { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .05em; padding: 1px 6px; border-radius: 4px; }
+.lieu.P1 { background: var(--p1-soft); color: var(--p1); }
+.lieu.P2 { background: var(--p2-soft); color: var(--p2); }
+.lieu.P3 { background: var(--p3-soft); color: var(--p3); }
+
+.scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+table.grid { border-collapse: separate; border-spacing: 0; font-variant-numeric: tabular-nums; font-size: 13px; }
+table.grid th, table.grid td { padding: 0; border-bottom: 1px solid var(--line); }
+table.grid thead th { position: sticky; top: 0; background: var(--surface); font-weight: 700; padding: 6px 4px; text-align: center; white-space: nowrap; }
+table.grid thead tr.halves th { font-family: var(--f-display); font-size: 13px; color: var(--muted); }
+table.grid th.act { position: sticky; left: 0; background: var(--surface); text-align: left; padding: 6px 10px; min-width: 170px; z-index: 1; border-right: 1px solid var(--line); }
+table.grid th.act button { background: none; border: 0; padding: 0; font: 700 13px var(--f-body); color: var(--fg); cursor: pointer; text-align: left; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+table.grid th.act small { display: block; color: var(--muted); font-weight: 400; }
+td.sep, th.sep { border-left: 2px solid var(--line); }
+.cell { display: block; width: 100%; min-width: 46px; padding: 8px 4px; border: 0; background: transparent; font: 700 13px var(--f-body); color: var(--muted); cursor: pointer; text-align: center; }
+.cell.some { background: var(--accent-soft); color: var(--accent); }
+.cell.full { background: var(--full-soft); color: var(--full); }
+.cell.over { background: var(--full); color: var(--surface); }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--muted); margin: 10px 0 0; }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 5px; }
+
+.detail h2 { margin-bottom: 4px; }
+.detail ol { margin: 8px 0 0; padding-left: 22px; }
+.sheet { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin-top: 12px; }
+.sheet > div { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-width: 0; }
+.sheet h4 { margin: 0 0 4px; font-size: 13px; display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
+.sheet ul { margin: 0; padding-left: 18px; font-size: 14px; }
+.sheet .empty { color: var(--muted); font-size: 13px; }
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.toolbar input { max-width: 280px; }
+.people { display: flex; flex-direction: column; gap: 8px; }
+.person { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; }
+.person .who { min-width: 0; }
+.person .who b { font-size: 16px; }
+.person .who span { color: var(--muted); font-size: 13px; margin-left: 6px; }
+.person .plan { grid-column: 1 / -1; font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.person .plan em { font-style: normal; color: var(--fg); }
+.person .btns { display: flex; gap: 6px; align-items: start; }
+.empty-state { text-align: center; color: var(--muted); padding: 30px 10px; }
+</style>
+<style>
+body { margin: 0; }
+[hidden] { display: none !important; }
+.login { max-width: 420px; margin: 40px auto 0; }
+.login p { margin: 0; }
+.topline { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sync { font-size: 13px; color: var(--muted); }
+.sync.err { color: var(--full); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="topline">
+      <div class="eyebrow">Journée APA · mardi 17 novembre</div>
+      <button class="btn small" id="logout" type="button" hidden>Se déconnecter</button>
+    </div>
+    <h1>Inscriptions aux activités</h1>
+    <p class="sub">Inscris chaque bénéficiaire sur les 15 tournantes de 15 minutes (5 minutes de changement en musique entre chaque). Accueil des bénéficiaires dès 9h30.</p>
+    <div class="stats" id="stats"></div>
+  </header>
+
+  <form id="login" class="panel stack login" autocomplete="off">
+    <h2>Code d'équipe</h2>
+    <p class="sub">Entre le code donné par l'organisateur pour voir et modifier les inscriptions.</p>
+    <label class="f" for="code">Code
+      <input type="text" id="code" required autocomplete="current-password">
+    </label>
+    <div class="actions">
+      <button class="btn primary" type="submit" id="login-btn">Entrer</button>
+      <span class="msg" id="login-msg" role="status"></span>
+    </div>
+  </form>
+
+  <div id="app" hidden>
+    <nav class="tabs" role="tablist">
+      <button role="tab" id="tab-inscrire" aria-selected="true" data-view="inscrire">Inscrire</button>
+      <button role="tab" id="tab-planning" aria-selected="false" data-view="planning">Planning des places</button>
+      <button role="tab" id="tab-inscrits" aria-selected="false" data-view="inscrits">Bénéficiaires inscrits</button>
+    </nav>
+    <main>
+      <div id="notice" class="notice" hidden></div>
+
+      <section id="view-inscrire" class="stack">
+        <form id="form" class="panel stack" autocomplete="off">
+          <div class="half-title"><h2 id="form-title">Nouveau bénéficiaire</h2></div>
+          <div class="fields">
+            <label class="f" for="nom">Nom et prénom
+              <input type="text" id="nom" required maxlength="120" placeholder="ex. Lucas Martin">
+            </label>
+            <label class="f" for="groupe">Groupe / institution / éducateur
+              <input type="text" id="groupe" maxlength="120" placeholder="ex. Groupe des Lilas">
+            </label>
+          </div>
+          <div id="rotations"></div>
+          <div class="actions">
+            <button class="btn primary" type="submit" id="save">Enregistrer l'inscription</button>
+            <button class="btn" type="button" id="cancel" hidden>Annuler la modification</button>
+            <span class="msg" id="msg" role="status"></span>
+          </div>
+        </form>
+      </section>
+
+      <section id="view-planning" class="stack" hidden>
+        <div>
+          <div class="scroll"><table class="grid" id="grid"></table></div>
+          <div class="legend">
+            <span><i style="background:var(--surface);border:1px solid var(--line)"></i>vide</span>
+            <span><i style="background:var(--accent-soft)"></i>places restantes</span>
+            <span><i style="background:var(--full-soft)"></i>complet</span>
+            <span>Clique une case pour voir les noms, ou une activité pour sa fiche complète.</span>
+          </div>
+        </div>
+        <div class="panel detail" id="detail"><p class="sub">Sélectionne une case ou une activité.</p></div>
+      </section>
+
+      <section id="view-inscrits" hidden>
+        <div class="toolbar">
+          <input type="text" id="search" placeholder="Rechercher un nom ou un groupe">
+          <div class="actions">
+            <span class="sub" id="count"></span>
+            <button class="btn small" type="button" id="csv-benef">Exporter par bénéficiaire (CSV)</button>
+            <button class="btn small" type="button" id="csv-act">Exporter par activité (CSV)</button>
+          </div>
+        </div>
+        <div class="people" id="people"></div>
+      </section>
+      <p class="sync" id="sync"></p>
+    </main>
+  </div>
+</div>
+
+<script>
+/* ================== CONFIGURATION ==================
+   Supabase > Project Settings > API :
+   - Project URL
+   - clé publique "anon" / "publishable" (jamais la clé service_role / secret) */
+const SUPABASE_URL = "https://VOTRE-PROJET.supabase.co";
+const SUPABASE_KEY = "VOTRE-CLE-PUBLIQUE";
+const RAFRAICHISSEMENT_MS = 5000;
+/* =================================================== */
+
+let ACTIVITES = [], ACT = {}, ROTS = [];
+let people = [];
+let editingId = null, code = null, loaded = false, busy = false;
+const $ = id => document.getElementById(id);
+const hm = s => s.replace(":", "h").replace(/^0/, "");
+const plage = r => hm(r.debut) + "–" + hm(r.fin);
+
+/* ---------- Appels Supabase (fonctions SQL uniquement) ---------- */
+async function rpc(fn, args) {
+  const headers = { "Content-Type": "application/json", apikey: SUPABASE_KEY };
+  if (SUPABASE_KEY.startsWith("eyJ")) headers.Authorization = "Bearer " + SUPABASE_KEY;
+  let res;
+  try {
+    res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, { method: "POST", headers, body: JSON.stringify(args) });
+  } catch {
+    throw { code: "reseau", message: "Pas de connexion au serveur. Vérifie Internet et réessaie." };
+  }
+  const txt = await res.text();
+  const body = txt ? JSON.parse(txt) : null;
+  if (!res.ok) throw { code: body?.code || String(res.status), message: body?.message || "Erreur serveur (" + res.status + ")." };
+  return body;
+}
+
+/* ---------- Connexion ---------- */
+function getSaved() { try { return localStorage.getItem("apa-code"); } catch { return null; } }
+function setSaved(v) { try { v ? localStorage.setItem("apa-code", v) : localStorage.removeItem("apa-code"); } catch {} }
+
+$("login").addEventListener("submit", async e => {
+  e.preventDefault();
+  const c = $("code").value.trim();
+  if (!c) return;
+  $("login-btn").disabled = true; $("login-msg").textContent = "Vérification…"; $("login-msg").className = "msg";
+  try {
+    await rpc("apa_connexion", { p_code: c });
+    code = c; setSaved(c); enterApp();
+  } catch (err) {
+    $("login-msg").textContent = err.code === "28000" ? "Code incorrect." : err.message;
+    $("login-msg").className = "msg err";
+  } finally { $("login-btn").disabled = false; }
+});
+$("logout").addEventListener("click", () => { setSaved(null); location.reload(); });
+
+function enterApp() {
+  $("login").hidden = true; $("app").hidden = false; $("logout").hidden = false;
+  try { const t = localStorage.getItem("apa-tab"); if (t) show(t); } catch {}
+  refresh();
+  setInterval(() => { if (!document.hidden) refresh(); }, RAFRAICHISSEMENT_MS);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+}
+
+async function refresh() {
+  if (busy) return;
+  busy = true;
+  try {
+    const etat = await rpc("apa_etat", { p_code: code });
+    const firstLoad = !ROTS.length;
+    ACTIVITES = etat.activites; ACT = Object.fromEntries(ACTIVITES.map(a => [a.id, a]));
+    ROTS = etat.tournantes.map((t, i, all) => ({ ...t, key: String(t.id), n: t.id, sep: i === 0 || t.demi !== all[i - 1].demi }));
+    people = etat.beneficiaires;
+    if (firstLoad) buildRotations();
+    loaded = true;
+    $("sync").textContent = "À jour à " + new Date().toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    $("sync").className = "sync";
+    renderAll();
+  } catch (err) {
+    if (err.code === "28000") { setSaved(null); location.reload(); return; }
+    $("sync").textContent = "Mise à jour impossible : " + err.message;
+    $("sync").className = "sync err";
+  } finally { busy = false; }
+}
+
+/* ---------- Calculs ---------- */
+function counts(excludeId) {
+  const c = {};
+  for (const p of people) {
+    if (p.id === excludeId) continue;
+    for (const [k, a] of Object.entries(p.plan || {})) c[k + "|" + a] = (c[k + "|" + a] || 0) + 1;
+  }
+  return c;
+}
+const namesAt = (rkey, aid) => people.filter(p => p.plan && p.plan[rkey] === aid).map(p => p.nom).sort((x, y) => x.localeCompare(y, "fr"));
+const totalPlaces = () => ACTIVITES.reduce((s, a) => s + a.cap, 0) * ROTS.length;
+
+/* ---------- Formulaire ---------- */
+function buildRotations() {
+  const box = $("rotations"); box.textContent = "";
+  for (const demi of [...new Set(ROTS.map(r => r.demi))]) {
+    const rs = ROTS.filter(r => r.demi === demi);
+    const head = document.createElement("div"); head.className = "half-title";
+    head.innerHTML = `<h3>${esc(demi)}</h3><small>${rs.length} tournantes · ${hm(rs[0].debut)}–${hm(rs.at(-1).fin)}</small>`;
+    box.appendChild(head);
+    for (const r of rs) {
+      const row = document.createElement("div"); row.className = "rot";
+      row.innerHTML = `<label class="t" for="sel-${r.key}"><b>Tournante ${r.n}</b>${plage(r)}</label><select id="sel-${r.key}"><option value="">— Pas d'activité (pause) —</option></select>`;
+      box.appendChild(row);
+    }
+  }
+  box.addEventListener("change", refreshSelects);
+}
+function refreshSelects() {
+  if (!ROTS.length) return;
+  const c = counts(editingId), chosen = {};
+  for (const r of ROTS) chosen[r.key] = $("sel-" + r.key).value;
+  for (const r of ROTS) {
+    const sel = $("sel-" + r.key), cur = chosen[r.key];
+    sel.textContent = "";
+    sel.add(new Option("— Pas d'activité (pause) —", ""));
+    for (const lieu of [...new Set(ACTIVITES.map(a => a.lieu))]) {
+      const g = document.createElement("optgroup"); g.label = "Lieu " + lieu;
+      for (const a of ACTIVITES.filter(x => x.lieu === lieu)) {
+        const reste = a.cap - (c[r.key + "|" + a.id] || 0);
+        const o = new Option(reste > 0 ? `${a.nom} — ${reste} place${reste > 1 ? "s" : ""}` : `${a.nom} — complet`, a.id);
+        if (reste <= 0 && cur !== a.id) o.disabled = true;
+        g.appendChild(o);
+      }
+      sel.add(g);
+    }
+    sel.value = cur;
+    const row = sel.closest(".rot");
+    const dup = cur && Object.entries(chosen).some(([k, v]) => k !== r.key && v === cur);
+    row.classList.toggle("dup", !!dup);
+    let hint = row.querySelector(".hint");
+    if (dup && !hint) { hint = document.createElement("div"); hint.className = "hint"; row.appendChild(hint); }
+    if (hint) { if (dup) hint.textContent = "Déjà choisie sur une autre tournante"; else hint.remove(); }
+  }
+}
+function resetForm() {
+  editingId = null;
+  $("form").reset();
+  for (const r of ROTS) $("sel-" + r.key).value = "";
+  $("form-title").textContent = "Nouveau bénéficiaire";
+  $("save").textContent = "Enregistrer l'inscription";
+  $("cancel").hidden = true;
+  refreshSelects();
+}
+function loadForm(p) {
+  editingId = p.id;
+  $("nom").value = p.nom; $("groupe").value = p.groupe || "";
+  refreshSelects();
+  for (const r of ROTS) $("sel-" + r.key).value = (p.plan && p.plan[r.key]) || "";
+  refreshSelects();
+  $("form-title").textContent = "Modifier : " + p.nom;
+  $("save").textContent = "Enregistrer les changements";
+  $("cancel").hidden = false;
+  setMsg("");
+  show("inscrire");
+  $("nom").focus();
+}
+function setMsg(t, kind) { const m = $("msg"); m.textContent = t; m.className = "msg " + (kind || ""); }
+
+$("form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const nom = $("nom").value.trim();
+  if (!nom) { setMsg("Indique le nom du bénéficiaire.", "err"); $("nom").focus(); return; }
+  const plan = {};
+  for (const r of ROTS) { const v = $("sel-" + r.key).value; if (v) plan[r.key] = v; }
+  if (!Object.keys(plan).length) { setMsg("Choisis au moins une activité.", "err"); return; }
+  if (!editingId) {
+    const same = people.find(p => p.nom.toLowerCase() === nom.toLowerCase());
+    if (same && $("save").dataset.confirm !== "1") {
+      $("save").dataset.confirm = "1";
+      setMsg(`${same.nom} est déjà inscrit·e. Clique encore pour créer une deuxième fiche, ou modifie la fiche existante.`, "err");
+      return;
+    }
+  }
+  delete $("save").dataset.confirm;
+  $("save").disabled = true; setMsg("Enregistrement…");
+  try {
+    // Le serveur revérifie les places sous verrou : impossible de dépasser la capacité.
+    await rpc("apa_enregistrer", { p_code: code, p_id: editingId, p_nom: nom, p_groupe: $("groupe").value.trim(), p_plan: plan });
+    const wasEdit = !!editingId;
+    resetForm();
+    setMsg((wasEdit ? "Modifications enregistrées pour " : "Inscription enregistrée pour ") + nom + ".", "ok");
+  } catch (err) {
+    setMsg(err.message, "err");
+  } finally {
+    $("save").disabled = false;
+    await refresh();
+  }
+});
+$("cancel").addEventListener("click", () => { resetForm(); setMsg(""); });
+
+/* ---------- Planning ---------- */
+function renderGrid() {
+  const c = counts(null);
+  const demis = [...new Set(ROTS.map(r => r.demi))];
+  let h = `<thead><tr class="halves"><th class="act"></th>${demis.map(d => `<th class="sep" colspan="${ROTS.filter(r => r.demi === d).length}">${esc(d)}</th>`).join("")}</tr><tr><th class="act">Activité</th>`;
+  for (const r of ROTS) h += `<th class="${r.sep ? "sep" : ""}" title="${plage(r)}">T${r.n}<br><small style="font-weight:400">${hm(r.debut)}</small></th>`;
+  h += `</tr></thead><tbody>`;
+  for (const a of ACTIVITES) {
+    h += `<tr><th class="act"><button type="button" data-sheet="${a.id}">${esc(a.nom)}</button><small><span class="lieu ${a.lieu}">${a.lieu}</span> · ${a.cap} places</small></th>`;
+    for (const r of ROTS) {
+      const n = c[r.key + "|" + a.id] || 0;
+      const cls = n >= a.cap ? "full" : n > 0 ? "some" : "";
+      h += `<td class="${r.sep ? "sep" : ""}"><button type="button" class="cell ${cls}" data-r="${r.key}" data-a="${a.id}" aria-label="${esc(a.nom)}, tournante ${r.n} : ${n} sur ${a.cap}">${n}/${a.cap}</button></td>`;
+    }
+    h += `</tr>`;
+  }
+  $("grid").innerHTML = h + `</tbody>`;
+}
+let detailSel = null;
+$("grid").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  detailSel = b.dataset.sheet ? { sheet: b.dataset.sheet } : { r: b.dataset.r, a: b.dataset.a };
+  renderDetail();
+  $("detail").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "nearest" });
+});
+function renderDetail() {
+  if (!detailSel) return;
+  const d = $("detail");
+  if (detailSel.sheet) {
+    const a = ACT[detailSel.sheet]; if (!a) return;
+    let h = `<h2>${esc(a.nom)}</h2><p class="sub"><span class="lieu ${a.lieu}">${a.lieu}</span> · ${a.cap} places par tournante · fiche pour les parrains et marraines</p><div class="sheet">`;
+    for (const r of ROTS) {
+      const ns = namesAt(r.key, a.id);
+      h += `<div><h4><span>T${r.n} · ${plage(r)}</span><span>${ns.length}/${a.cap}</span></h4>${ns.length ? "<ul>" + ns.map(n => `<li>${esc(n)}</li>`).join("") + "</ul>" : `<div class="empty">Personne</div>`}</div>`;
+    }
+    d.innerHTML = h + "</div>";
+  } else {
+    const a = ACT[detailSel.a], r = ROTS.find(x => x.key === detailSel.r); if (!a || !r) return;
+    const ns = namesAt(r.key, a.id);
+    d.innerHTML = `<h2>${esc(a.nom)} · T${r.n}</h2><p class="sub">${plage(r)} · ${ns.length} inscrit${ns.length > 1 ? "s" : ""} sur ${a.cap} places</p>` +
+      (ns.length ? "<ol>" + ns.map(n => `<li>${esc(n)}</li>`).join("") + "</ol>" : `<p class="sub">Personne pour l'instant.</p>`);
+  }
+}
+
+/* ---------- Liste ---------- */
+function renderPeople() {
+  const q = $("search").value.trim().toLowerCase();
+  const list = people.filter(p => !q || p.nom.toLowerCase().includes(q) || (p.groupe || "").toLowerCase().includes(q))
+    .sort((x, y) => x.nom.localeCompare(y.nom, "fr"));
+  $("count").textContent = `${list.length} bénéficiaire${list.length > 1 ? "s" : ""}`;
+  const box = $("people");
+  if (!list.length) {
+    box.innerHTML = `<div class="empty-state">${!loaded ? "Chargement des inscriptions…" : people.length ? "Aucun résultat pour cette recherche." : "Aucune inscription pour l'instant. Commence par l'onglet « Inscrire »."}</div>`;
+    return;
+  }
+  box.innerHTML = list.map(p => {
+    const plan = ROTS.filter(r => p.plan && p.plan[r.key]).map(r => `<span>T${r.n} ${hm(r.debut)} <em>${esc(ACT[p.plan[r.key]]?.nom || "?")}</em></span>`).join("");
+    return `<div class="person"><div class="who"><b>${esc(p.nom)}</b>${p.groupe ? `<span>${esc(p.groupe)}</span>` : ""}</div>
+      <div class="btns"><button class="btn small" data-edit="${p.id}">Modifier</button><button class="btn small danger" data-del="${p.id}">Supprimer</button></div>
+      <div class="plan">${plan || "Aucune activité"}</div></div>`;
+  }).join("");
+}
+$("search").addEventListener("input", renderPeople);
+$("people").addEventListener("click", async e => {
+  const ed = e.target.closest("[data-edit]"), del = e.target.closest("[data-del]");
+  if (ed) { const p = people.find(x => x.id === ed.dataset.edit); if (p) loadForm(p); }
+  if (del) {
+    if (del.dataset.confirm !== "1") { del.dataset.confirm = "1"; del.textContent = "Confirmer ?"; return; }
+    del.disabled = true;
+    try { await rpc("apa_supprimer", { p_code: code, p_id: del.dataset.del }); if (editingId === del.dataset.del) resetForm(); await refresh(); }
+    catch { del.disabled = false; del.textContent = "Échec, réessayer"; delete del.dataset.confirm; }
+  }
+});
+
+/* ---------- Export CSV (Excel FR : séparateur ;) ---------- */
+function downloadCsv(name, rows) {
+  const csv = "﻿" + rows.map(r => r.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(";")).join("\r\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+$("csv-benef").addEventListener("click", () => {
+  const rows = [["Nom", "Groupe", ...ROTS.map(r => `T${r.n} (${hm(r.debut)})`)]];
+  for (const p of [...people].sort((x, y) => x.nom.localeCompare(y.nom, "fr")))
+    rows.push([p.nom, p.groupe, ...ROTS.map(r => ACT[p.plan?.[r.key]]?.nom || "")]);
+  downloadCsv("apa-inscriptions-par-beneficiaire.csv", rows);
+});
+$("csv-act").addEventListener("click", () => {
+  const rows = [["Activité", "Lieu", "Tournante", "Horaire", "Nom", "Groupe"]];
+  for (const a of ACTIVITES) for (const r of ROTS)
+    for (const p of people.filter(p => p.plan?.[r.key] === a.id).sort((x, y) => x.nom.localeCompare(y.nom, "fr")))
+      rows.push([a.nom, a.lieu, "T" + r.n, plage(r), p.nom, p.groupe]);
+  downloadCsv("apa-inscriptions-par-activite.csv", rows);
+});
+
+/* ---------- Général ---------- */
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function renderStats() {
+  if (!ROTS.length) { $("stats").textContent = ""; return; }
+  const used = Object.values(counts(null)).reduce((s, n) => s + n, 0);
+  $("stats").innerHTML = `<div><b>${people.length}</b> <span>bénéficiaires inscrits</span></div>
+    <div><b>${used}</b> <span>/ ${totalPlaces()} places réservées</span></div>
+    <div><b>${ACTIVITES.length}</b> <span>activités · ${ROTS.length} tournantes</span></div>`;
+}
+function renderAll() { renderStats(); refreshSelects(); renderGrid(); renderDetail(); renderPeople(); }
+function show(view) {
+  for (const b of document.querySelectorAll("nav.tabs button")) b.setAttribute("aria-selected", b.dataset.view === view);
+  for (const v of ["inscrire", "planning", "inscrits"]) $("view-" + v).hidden = v !== view;
+  try { localStorage.setItem("apa-tab", view); } catch {}
+}
+document.querySelector("nav.tabs").addEventListener("click", e => { const b = e.target.closest("button"); if (b) show(b.dataset.view); });
+
+if (SUPABASE_URL.includes("VOTRE-PROJET")) {
+  $("login-msg").textContent = "Page pas encore configurée : renseigne SUPABASE_URL et SUPABASE_KEY dans index.html.";
+  $("login-msg").className = "msg err";
+} else {
+  const saved = getSaved();
+  if (saved) { code = saved; enterApp(); }
+}
+</script>
+</body>
+</html>
